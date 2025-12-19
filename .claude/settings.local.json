@@ -50,7 +50,10 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(del \"c:\\\\Users\\\\diana\\\\Desktop\\\\SheetFit\\\\nul\")",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
