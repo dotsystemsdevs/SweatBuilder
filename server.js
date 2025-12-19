@@ -1,28 +1,17 @@
-const express = require("express");
-const cors = require("cors");
+const http = require("http");
 
-const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
-
-// Health check
-app.get("/", (req, res) => {
-  res.send("OK");
-});
-
-// Onboarding endpoint
-app.post("/api/ai/onboarding", (req, res) => {
-  const { step } = req.body || {};
-
-  if (step === "PING") {
-    return res.json({ ok: true });
+const server = http.createServer((req, res) => {
+  if (req.url === "/") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("OK");
+  } else {
+    res.writeHead(404);
+    res.end();
   }
-
-  return res.json({ ok: true, step: step || "unknown" });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+server.listen(PORT, () => {
+  console.log("Server running on port", PORT);
 });
