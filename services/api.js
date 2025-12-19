@@ -42,3 +42,6 @@ export const confirmPlan = () =>
 
 export const chat = (message, context = null) =>
   callOnboardingAPI("CHAT", { message, context });
+
+export const lookupEvent = (eventName) =>
+  callOnboardingAPI("LOOKUP_EVENT", { eventName });

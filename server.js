@@ -247,6 +247,51 @@ Respond briefly and helpfully. Focus on training and health. Max 2-3 sentences.`
         return res.json({ ok: true, data: { reply } });
       }
 
+      // ==================== LOOKUP_EVENT ====================
+      case "LOOKUP_EVENT": {
+        const { eventName } = payload || {};
+        if (!eventName) {
+          return res.json({ ok: true, data: { found: false } });
+        }
+
+        const lookupPrompt = `Try to identify this sports event using your general knowledge.
+
+Event name: "${eventName}"
+
+Instructions:
+- Use general knowledge only (no web search)
+- If it's a well-known event (marathon, triathlon, cycling race, etc.), infer:
+  - Official event name
+  - Sport type
+  - Typical distance(s)
+  - Likely next/upcoming date (assume current or next year)
+- Set confidence based on how sure you are
+- Never invent obscure or fictional events
+- If uncertain, set found: false
+
+Return ONLY this JSON format:
+{
+  "found": true | false,
+  "eventName": "Official Event Name",
+  "sport": "running | cycling | triathlon | swimming | other",
+  "distance": "42.195 km" | "70.3 miles" | null,
+  "eventDate": "2025-09-28" | null,
+  "location": "City, Country" | null,
+  "confidence": "high" | "medium" | "low"
+}
+
+If you're not confident this is a real event, return:
+{ "found": false }`;
+
+        const text = await callAI(SYSTEM_PROMPT, lookupPrompt, 512);
+        const parsed = safeJsonParse(text);
+
+        if (parsed && parsed.found === true && parsed.confidence !== "low") {
+          return res.json({ ok: true, data: parsed });
+        }
+        return res.json({ ok: true, data: { found: false } });
+      }
+
       // ==================== DEFAULT ====================
       default:
         return res.json({ ok: true, step: step || "unknown" });
