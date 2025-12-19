@@ -59,12 +59,12 @@ export function useAICoachSubmit({ addMessage, createNewChat, selectChat, curren
         // Check if aborted during request
         if (abortRef.current) return;
 
-        let reply = "Något gick fel. Försök igen.";
+        let reply = "Something went wrong. Try again.";
         if (response?.ok && response?.data?.reply) {
           reply = response.data.reply;
         } else if (!response?.ok) {
           setError(true);
-          setErrorMessage(response?.error || "Kunde inte nå servern");
+          setErrorMessage(response?.error || "Could not reach server");
         }
 
         const aiMsg = {
@@ -81,10 +81,10 @@ export function useAICoachSubmit({ addMessage, createNewChat, selectChat, curren
       } catch (err) {
         if (!abortRef.current) {
           setError(true);
-          setErrorMessage("Nätverksfel");
+          setErrorMessage("Network error");
           const errorMsg = {
             id: generateId(),
-            text: "Kunde inte ansluta till servern. Försök igen.",
+            text: "Could not connect to server. Try again.",
             role: "assistant",
             isAI: true,
             timestamp: formatMessageTimestamp(),

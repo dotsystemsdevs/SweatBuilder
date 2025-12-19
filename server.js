@@ -13,19 +13,19 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const SYSTEM_PROMPT = `Du är en träningscoach. Lugn, stöttande, utan att döma.
+const SYSTEM_PROMPT = `You are a training coach. Calm, supportive, non-judgmental.
 
-Principer:
-- Konsistens före intensitet
-- Små steg räcker
-- Vila är träning
+Principles:
+- Consistency over intensity
+- Small steps are enough
+- Rest is training
 
-Stil:
-- Korta svar
-- Inga utropstecken
-- Ingen hype eller motivation
+Style:
+- Short answers
+- No exclamation marks
+- No hype or motivation
 
-Du svarar ENDAST med JSON när det efterfrågas.`;
+You ONLY respond with JSON when requested.`;
 
 // Fallbacks
 const FALLBACKS = {
@@ -36,7 +36,7 @@ const FALLBACKS = {
     needs_followup: true,
   },
   eventFollowup: {
-    question: "Vilket event siktar du på?",
+    question: "What event are you aiming for?",
   },
   generatePlan: {
     plan: {
@@ -44,7 +44,7 @@ const FALLBACKS = {
       days_per_week: 3,
       schedule: [],
     },
-    explanation: "Kunde inte generera plan just nu.",
+    explanation: "Could not generate plan right now.",
   },
 };
 
@@ -125,12 +125,12 @@ Format:
         // missingInfo can be: "event_name", "event_date", "sport"
 
         const questions = {
-          event_name: "Vilket event siktar du på?",
-          event_date: "När är eventet?",
-          sport: "Vilken sport gäller det?",
+          event_name: "What event are you aiming for?",
+          event_date: "When is the event?",
+          sport: "What sport is it?",
         };
 
-        const question = questions[missingInfo] || "Berätta mer om ditt mål.";
+        const question = questions[missingInfo] || "Tell me more about your goal.";
         return res.json({ ok: true, data: { question } });
       }
 
@@ -148,24 +148,24 @@ Format:
           tools,
         } = payload || {};
 
-        const prompt = `Skapa ett träningsprogram. Returnera ENDAST JSON.
+        const prompt = `Create a training program. Return ONLY JSON.
 
 Input:
-- Måltyp: ${goal_type || "general_fitness"}
+- Goal type: ${goal_type || "general_fitness"}
 - Sport: ${sport || "unknown"}
-- Event: ${event_name || "inget specifikt"}
-- Datum: ${event_date || "inget"}
-- Veckor kvar: ${weeks_until_event || "okänt"}
-- Tränar nu: ${current_training || "okänt"}
-- Dagar/vecka: ${days_per_week || 3}
-- Skador: ${injuries || "inga"}
-- Verktyg: ${tools || "inga"}
+- Event: ${event_name || "none specific"}
+- Date: ${event_date || "none"}
+- Weeks left: ${weeks_until_event || "unknown"}
+- Current training: ${current_training || "unknown"}
+- Days/week: ${days_per_week || 3}
+- Injuries: ${injuries || "none"}
+- Equipment: ${tools || "none"}
 
-Regler:
-- Konsistens före intensitet
-- Inkludera vilodar
-- Realistiskt för vanligt liv
-- Max ${days_per_week || 3} träningsdagar per vecka
+Rules:
+- Consistency over intensity
+- Include rest days
+- Realistic for everyday life
+- Max ${days_per_week || 3} training days per week
 
 Format:
 {
@@ -176,12 +176,12 @@ Format:
       {
         "week": 1,
         "days": [
-          { "day": "Måndag", "type": "träning | vila", "description": "kort beskrivning" }
+          { "day": "Monday", "type": "training | rest", "description": "short description" }
         ]
       }
     ]
   },
-  "explanation": "Max 5 meningar om planen"
+  "explanation": "Max 5 sentences about the plan"
 }`;
 
         const text = await callAI(SYSTEM_PROMPT, prompt, 2048);
@@ -193,27 +193,27 @@ Format:
       case "SUMMARY": {
         const { plan, goal_type, sport, event_name, weeks_until_event } = payload || {};
 
-        const summaryPrompt = `Förklara denna träningsplan lugnt och tydligt för användaren.
+        const summaryPrompt = `Explain this training plan calmly and clearly to the user.
 
 Plan:
-- Mål: ${goal_type || "allmän träning"}
-- Sport: ${sport || "okänd"}
-- Event: ${event_name || "inget specifikt"}
-- Veckor: ${weeks_until_event || "flexibelt"}
-- Dagar per vecka: ${plan?.days_per_week || 3}
+- Goal: ${goal_type || "general training"}
+- Sport: ${sport || "unknown"}
+- Event: ${event_name || "none specific"}
+- Weeks: ${weeks_until_event || "flexible"}
+- Days per week: ${plan?.days_per_week || 3}
 
-Skriv 3-4 meningar som förklarar:
-1. Vad planen prioriterar
-2. Varför den är realistisk
-3. Vad som medvetet hålls lätt
+Write 3-4 sentences that explain:
+1. What the plan prioritizes
+2. Why it's realistic
+3. What's intentionally kept light
 
-Avsluta ALLTID med exakt denna fråga:
-"Känns det här realistiskt för dig?"
+ALWAYS end with this exact question:
+"Does this feel realistic for you?"
 
-Skriv på svenska. Ingen hype. Ingen teknisk jargong. Lugn ton.`;
+No hype. No technical jargon. Calm tone.`;
 
         const text = await callAI(SYSTEM_PROMPT, summaryPrompt, 512);
-        const summary = text || "Planen fokuserar på att bygga en hållbar rutin. Känns det här realistiskt för dig?";
+        const summary = text || "The plan focuses on building a sustainable routine. Does this feel realistic for you?";
         return res.json({ ok: true, data: { summary } });
       }
 
@@ -224,7 +224,7 @@ Skriv på svenska. Ingen hype. Ingen teknisk jargong. Lugn ton.`;
           ok: true,
           data: {
             confirmed: true,
-            message: "Det här är bara en startpunkt. Vi anpassar planen efter hur det går.",
+            message: "This is just a starting point. We'll adjust the plan as we go.",
           },
         });
       }
@@ -233,17 +233,17 @@ Skriv på svenska. Ingen hype. Ingen teknisk jargong. Lugn ton.`;
       case "CHAT": {
         const { message, context } = payload || {};
         if (!message) {
-          return res.json({ ok: true, data: { reply: "Vad funderar du på?" } });
+          return res.json({ ok: true, data: { reply: "What's on your mind?" } });
         }
 
-        const chatPrompt = `Användaren säger: "${message}"
+        const chatPrompt = `User says: "${message}"
 
-${context ? `Kontext: ${context}` : ""}
+${context ? `Context: ${context}` : ""}
 
-Svara kort och hjälpsamt. Fokusera på träning och hälsa. Max 2-3 meningar.`;
+Respond briefly and helpfully. Focus on training and health. Max 2-3 sentences.`;
 
         const text = await callAI(SYSTEM_PROMPT, chatPrompt, 256);
-        const reply = text || "Jag hörde inte riktigt. Kan du säga det igen?";
+        const reply = text || "I didn't quite catch that. Can you say it again?";
         return res.json({ ok: true, data: { reply } });
       }
 
