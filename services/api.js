@@ -22,26 +22,41 @@ export async function callOnboardingAPI(step, payload = {}) {
   }
 }
 
-// Convenience functions for each step
+// =============================================================================
+// CONVENIENCE FUNCTIONS
+// =============================================================================
+
+// Health check
 export const ping = () => callOnboardingAPI("PING");
 
+// Interpret user's goal text
 export const interpretGoal = (goalText) =>
   callOnboardingAPI("INTERPRET_GOAL", { goalText });
 
-export const eventFollowup = (missingInfo) =>
-  callOnboardingAPI("EVENT_FOLLOWUP", { missingInfo });
+// Look up event by name
+export const lookupEvent = (eventName) =>
+  callOnboardingAPI("LOOKUP_EVENT", { eventName });
 
+// Build training context (determines progression style, ramp, recovery)
+export const buildTrainingContext = (data) =>
+  callOnboardingAPI("BUILD_TRAINING_CONTEXT", data);
+
+// Generate training plan
 export const generatePlan = (data) =>
   callOnboardingAPI("GENERATE_PLAN", data);
 
+// Get plan summary
 export const getSummary = (data) =>
   callOnboardingAPI("SUMMARY", data);
 
+// Adjust existing plan
+export const adjustPlan = (currentPlan, adjustmentRequest) =>
+  callOnboardingAPI("ADJUST_PLAN", { currentPlan, adjustmentRequest });
+
+// Confirm plan
 export const confirmPlan = () =>
   callOnboardingAPI("CONFIRM");
 
+// Chat with AI
 export const chat = (message, context = null) =>
   callOnboardingAPI("CHAT", { message, context });
-
-export const lookupEvent = (eventName) =>
-  callOnboardingAPI("LOOKUP_EVENT", { eventName });

@@ -25,14 +25,16 @@ import {
 } from "../services/api";
 import theme from "../theme";
 
-// Typewriter component for AI messages
+// =============================================================================
+// COMPONENTS
+// =============================================================================
+
 const TypewriterText = ({ text, style, onComplete, speed = 20 }) => {
   const [displayedText, setDisplayedText] = useState("");
   const [isComplete, setIsComplete] = useState(false);
 
   useEffect(() => {
     if (isComplete) return;
-
     let index = 0;
     const interval = setInterval(() => {
       if (index < text.length) {
@@ -44,14 +46,12 @@ const TypewriterText = ({ text, style, onComplete, speed = 20 }) => {
         onComplete?.();
       }
     }, speed);
-
     return () => clearInterval(interval);
   }, [text]);
 
   return <Text style={style}>{displayedText}</Text>;
 };
 
-// Typing indicator with animated dots
 const TypingIndicator = () => {
   const dot1 = useRef(new Animated.Value(0.3)).current;
   const dot2 = useRef(new Animated.Value(0.3)).current;
@@ -81,20 +81,43 @@ const TypingIndicator = () => {
   );
 };
 
-// Onboarding steps
+// =============================================================================
+// STEPS - THE DEFINITIVE FLOW
+// =============================================================================
+
 const STEPS = {
+  // Start
   WELCOME: "welcome",
   INTRO: "intro",
-  GOAL: "goal",
-  FOLLOWUP: "followup",
+
+  // Goal type
+  GOAL_TYPE: "goal_type",
+
+  // Event path
+  EVENT_NAME: "event_name",
   EVENT_CONFIRM: "event_confirm",
+  EVENT_DISTANCE: "event_distance",
   EVENT_DATE: "event_date",
-  CURRENT_FORM: "current_form",
-  ADVANCED_DATA: "advanced_data",
+
+  // Non-event path (optional target)
+  TARGET_GOAL: "target_goal",
+  TARGET_TYPE: "target_type",
+  TARGET_DETAILS: "target_details",
+
+  // Common steps
+  PLAN_LENGTH: "plan_length",
+  STARTING_POINT: "starting_point",
+  ADVANCED_SETTINGS: "advanced_settings",
+
+  // Generation
   PLAN: "plan",
   SUMMARY: "summary",
   DONE: "done",
 };
+
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
 
 export default function AIOnboardingScreen() {
   useStatusBar(theme.colors.background);
@@ -102,16 +125,77 @@ export default function AIOnboardingScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef(null);
 
+  // State
   const [step, setStep] = useState(STEPS.WELCOME);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
   const [userData, setUserData] = useState({});
   const [typingMessageId, setTypingMessageId] = useState(null);
+  const [showTextInput, setShowTextInput] = useState(false);
 
+  // Pending data
+  const [pendingEventData, setPendingEventData] = useState(null);
+
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const continueButtonAnim = useRef(new Animated.Value(0)).current;
   const pillsAnim = useRef(new Animated.Value(0)).current;
+
+  // =============================================================================
+  // QUICK REPLY OPTIONS
+  // =============================================================================
+
+  const goalTypeReplies = [
+    { label: "A race or event 🏁", value: "event" },
+    { label: "Get stronger 💪", value: "strength" },
+    { label: "General fitness 🧘", value: "fitness" },
+    { label: "Something else ✏️", value: "other" },
+  ];
+
+  const eventConfirmReplies = [
+    { label: "Yes, use this ✅", value: "confirm" },
+    { label: "I'll enter it manually ✏️", value: "manual" },
+  ];
+
+  const targetGoalReplies = [
+    { label: "Yes, set a target 🎯", value: "yes" },
+    { label: "Skip — just get started ➡️", value: "skip" },
+  ];
+
+  const targetTypeReplies = [
+    { label: "Strength 💪", value: "strength" },
+    { label: "Endurance 🏃", value: "endurance" },
+    { label: "Consistency 📅", value: "consistency" },
+  ];
+
+  const planLengthReplies = [
+    { label: "4 weeks", value: "4" },
+    { label: "8 weeks", value: "8" },
+    { label: "12 weeks", value: "12" },
+    { label: "Let it adapt", value: "adaptive" },
+  ];
+
+  const startingPointReplies = [
+    { label: "Training regularly 💪", value: "regular" },
+    { label: "On and off 🔄", value: "on_off" },
+    { label: "Just getting back 🚀", value: "returning" },
+    { label: "Not training at all 😴", value: "not_training" },
+  ];
+
+  const advancedSettingsReplies = [
+    { label: "Yes, fine-tune it ⚙️", value: "yes" },
+    { label: "No, use defaults 👍", value: "no" },
+  ];
+
+  const summaryReplies = [
+    { label: "Looks good ✅", value: "confirm" },
+    { label: "I want changes ✏️", value: "change" },
+  ];
+
+  // =============================================================================
+  // EFFECTS
+  // =============================================================================
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -125,32 +209,6 @@ export default function AIOnboardingScreen() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages]);
 
-  const messageCounter = useRef(0);
-  const addMessage = useCallback((text, isAI = false, title = null) => {
-    messageCounter.current += 1;
-    const id = `${Date.now()}-${messageCounter.current}`;
-    setMessages((prev) => [...prev, { id, text, isAI, title }]);
-    if (isAI) {
-      setTypingMessageId(id);
-      // Reset pills animation when new AI message starts
-      pillsAnim.setValue(0);
-    }
-  }, []);
-
-  const handleStart = () => {
-    haptic("impactLight");
-    setStep(STEPS.INTRO);
-    continueButtonAnim.setValue(0);
-
-    // Add intro message to chat
-    const introText = `I'm your AI training coach. I help turn goals into realistic plans — built around your life, not the other way around.
-
-I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
-
-    addMessage(introText, true, "Welcome 👋");
-  };
-
-  // Animate continue button when typing is done (INTRO step)
   useEffect(() => {
     if (step === STEPS.INTRO && !typingMessageId) {
       Animated.timing(continueButtonAnim, {
@@ -161,7 +219,6 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
     }
   }, [step, typingMessageId]);
 
-  // Animate pills when typing is done (other steps)
   useEffect(() => {
     if (!typingMessageId && step !== STEPS.WELCOME && step !== STEPS.INTRO && step !== STEPS.DONE) {
       Animated.timing(pillsAnim, {
@@ -172,320 +229,222 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
     }
   }, [step, typingMessageId]);
 
-  const handleContinue = () => {
-    haptic("impactLight");
-    setStep(STEPS.GOAL);
-    addMessage("Let's get started", false);
-    addMessage("Pick the one that fits you best 👇", true, "What are you training for?");
-  };
+  // =============================================================================
+  // HELPERS
+  // =============================================================================
 
-  const quickReplies = [
-    { label: "A race or event 🏁", value: "A race or event" },
-    { label: "General fitness 💪", value: "General fitness" },
-    { label: "Other ✏️", value: "other" },
-  ];
-
-  const [showGoalInput, setShowGoalInput] = useState(false);
-
-  const eventDateQuickReplies = [
-    { label: "I don't have a date yet 🤷", value: "no_date" },
-    { label: "Just exploring for now 👀", value: "exploring" },
-    { label: "Other ✏️", value: "other" },
-  ];
-
-  const eventConfirmQuickReplies = [
-    { label: "Yes, that's it! ✅", value: "confirm" },
-    { label: "No, let me enter manually ✏️", value: "manual" },
-  ];
-
-  const [showEventDateInput, setShowEventDateInput] = useState(false);
-  const [pendingEventData, setPendingEventData] = useState(null);
-
-  const currentFormQuickReplies = [
-    { label: "Training regularly 💪", value: "regular" },
-    { label: "On and off 🔄", value: "on_off" },
-    { label: "Just getting back 🚀", value: "returning" },
-    { label: "Not training right now 😴", value: "not_training" },
-  ];
-
-  const advancedDataQuickReplies = [
-    { label: "Yes, let's fine-tune it ⚙️", value: "yes" },
-    { label: "No, use generic values for now 👍", value: "no" },
-  ];
-
-  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
-
-  const handleEventConfirmQuickReply = (value) => {
-    haptic("impactLight");
-
-    if (value === "confirm" && pendingEventData) {
-      // User confirmed the event data
-      addMessage("Yes, that's it!", false);
-
-      const { eventName, eventDate, weeksToEvent } = pendingEventData;
-      setUserData((prev) => ({ ...prev, eventName, eventDate, weeksToEvent }));
-      setPendingEventData(null);
-
-      // Go to CURRENT_FORM
-      setTimeout(() => {
-        setStep(STEPS.CURRENT_FORM);
-        addMessage("Pick the one that fits you best 👇", true, "How are you training right now?");
-      }, 400);
-    } else {
-      // User wants to enter manually
-      addMessage("No, let me enter manually", false);
-      setPendingEventData(null);
-
-      setTimeout(() => {
-        setStep(STEPS.EVENT_DATE);
-        addMessage("Enter the date or pick an option 👇", true, "When is your event?");
-      }, 400);
+  const messageCounter = useRef(0);
+  const addMessage = useCallback((text, isAI = false, title = null) => {
+    messageCounter.current += 1;
+    const id = `${Date.now()}-${messageCounter.current}`;
+    setMessages((prev) => [...prev, { id, text, isAI, title }]);
+    if (isAI) {
+      setTypingMessageId(id);
+      pillsAnim.setValue(0);
     }
-  };
+  }, []);
 
-  const handleEventDateQuickReply = async (value) => {
-    haptic("impactLight");
-
-    // Om "Other" - visa input-fältet
-    if (value === "other") {
-      setShowEventDateInput(true);
-      return;
-    }
-
-    const displayText = value === "no_date" ? "I don't have a date yet" : "Just exploring for now";
-    addMessage(displayText, false);
-
-    // Spara eventDate som null och visa system-meddelande
-    setUserData((prev) => ({ ...prev, eventDate: null }));
-
-    // System-meddelande (inte AI)
+  const goToStep = (nextStep, aiMessage, aiTitle) => {
     setTimeout(() => {
-      messageCounter.current += 1;
-      setMessages((prev) => [...prev, {
-        id: `${Date.now()}-${messageCounter.current}`,
-        text: "No problem. We'll plan without a fixed date for now.",
-        isAI: false,
-        isSystem: true
-      }]);
-    }, 300);
-
-    // Gå vidare till CURRENT_FORM
-    setTimeout(() => {
-      setStep(STEPS.CURRENT_FORM);
-      addMessage("Pick the one that fits you best 👇", true, "How are you training right now?");
-    }, 800);
-  };
-
-  const handleCurrentFormQuickReply = (value) => {
-    haptic("impactLight");
-
-    // Hitta rätt label för visning
-    const selectedOption = currentFormQuickReplies.find((item) => item.value === value);
-    addMessage(selectedOption?.label || value, false);
-
-    // Spara currentForm direkt
-    setUserData((prev) => ({ ...prev, currentForm: value }));
-
-    // Gå vidare till ADVANCED_DATA
-    setTimeout(() => {
-      setStep(STEPS.ADVANCED_DATA);
-      addMessage("I can fine-tune your plan with FTP, threshold pace, or lifting weights. This is optional — skip it and I'll use safe starting values.", true, "Want to fine-tune? ⚙️");
+      setStep(nextStep);
+      if (aiMessage) addMessage(aiMessage, true, aiTitle);
     }, 400);
   };
 
-  const handleAdvancedDataQuickReply = async (value) => {
+  // =============================================================================
+  // STEP HANDLERS
+  // =============================================================================
+
+  const handleStart = () => {
     haptic("impactLight");
+    setStep(STEPS.INTRO);
+    continueButtonAnim.setValue(0);
+    addMessage(
+      "I'm your training coach 🤝\n\nI'll help you build a realistic training plan — based on your goal, where you're starting from, and how much time you have.",
+      true,
+      "Welcome"
+    );
+  };
 
-    // Visa användarens val
-    const selectedOption = advancedDataQuickReplies.find((item) => item.value === value);
-    addMessage(selectedOption?.label || value, false);
+  const handleContinue = () => {
+    haptic("impactLight");
+    addMessage("Let's do it", false);
+    goToStep(STEPS.GOAL_TYPE, "Pick the one that fits you best 👇", "What are you training for?");
+  };
 
-    if (value === "yes") {
-      // Öppna Advanced settings modal
-      setShowAdvancedModal(true);
+  // Goal Type
+  const handleGoalType = (value) => {
+    haptic("impactLight");
+    const selected = goalTypeReplies.find((r) => r.value === value);
+    addMessage(selected?.label || value, false);
+
+    if (value === "other") {
+      setShowTextInput(true);
+      return;
+    }
+
+    setUserData((prev) => ({ ...prev, goal_type: value }));
+
+    if (value === "event") {
+      goToStep(STEPS.EVENT_NAME, "Type the name below and I'll look it up.", "Which event? 🏁");
+      setShowTextInput(true);
     } else {
-      // Sätt advancedData = null och fortsätt till PLAN
-      setUserData((prev) => ({ ...prev, advancedData: null }));
-      proceedToPlan();
+      // Non-event: offer optional target
+      goToStep(
+        STEPS.TARGET_GOAL,
+        "If you want, we can lock the plan to a specific target.\nThis makes the progression much more precise.",
+        "Set a target?"
+      );
     }
   };
 
+  // Event Confirm
+  const handleEventConfirm = (value) => {
+    haptic("impactLight");
+    const selected = eventConfirmReplies.find((r) => r.value === value);
+    addMessage(selected?.label || value, false);
+
+    if (value === "confirm" && pendingEventData) {
+      setUserData((prev) => ({ ...prev, ...pendingEventData }));
+      setPendingEventData(null);
+      goToStep(STEPS.PLAN_LENGTH, "Pick what works for you 👇", "How long should the plan be?");
+    } else {
+      setPendingEventData(null);
+      setStep(STEPS.EVENT_DISTANCE);
+      setShowTextInput(true);
+      goToStep(STEPS.EVENT_DISTANCE, "What's the distance?", "Distance 🏃");
+    }
+  };
+
+  // Target Goal (optional)
+  const handleTargetGoal = (value) => {
+    haptic("impactLight");
+    const selected = targetGoalReplies.find((r) => r.value === value);
+    addMessage(selected?.label || value, false);
+
+    if (value === "yes") {
+      goToStep(STEPS.TARGET_TYPE, "What kind of target do you want?", "Target type");
+    } else {
+      // Skip target, go to plan length
+      setUserData((prev) => ({ ...prev, hasTarget: false }));
+      goToStep(STEPS.PLAN_LENGTH, "Pick what works for you 👇", "How long should the plan be?");
+    }
+  };
+
+  // Target Type
+  const handleTargetType = (value) => {
+    haptic("impactLight");
+    const selected = targetTypeReplies.find((r) => r.value === value);
+    addMessage(selected?.label || value, false);
+    setUserData((prev) => ({ ...prev, target_type: value, hasTarget: true }));
+
+    let prompt = "";
+    if (value === "strength") {
+      prompt = "What lift do you want to improve?\n\nExample: Bench 80 kg → 90 kg";
+    } else if (value === "endurance") {
+      prompt = "What does success look like?\n\nExample: 5 km in under 25 min";
+    } else {
+      prompt = "What would success look like for you?\n\nExample: Train 3x/week for 8 weeks";
+    }
+
+    setShowTextInput(true);
+    goToStep(STEPS.TARGET_DETAILS, prompt, "Your target 🎯");
+  };
+
+  // Plan Length
+  const handlePlanLength = (value) => {
+    haptic("impactLight");
+    const selected = planLengthReplies.find((r) => r.value === value);
+    addMessage(selected?.label || value, false);
+
+    const weeks = value === "adaptive" ? null : parseInt(value);
+    setUserData((prev) => ({ ...prev, plan_weeks: weeks, adaptive: value === "adaptive" }));
+
+    goToStep(STEPS.STARTING_POINT, "Pick the one that fits you best 👇", "Where are you starting from?");
+  };
+
+  // Starting Point
+  const handleStartingPoint = (value) => {
+    haptic("impactLight");
+    const selected = startingPointReplies.find((r) => r.value === value);
+    addMessage(selected?.label || value, false);
+    setUserData((prev) => ({ ...prev, starting_point: value }));
+
+    goToStep(
+      STEPS.ADVANCED_SETTINGS,
+      "Want to fine-tune things with numbers like FTP, paces, or lifting weights?",
+      "Advanced settings ⚙️"
+    );
+  };
+
+  // Advanced Settings
+  const handleAdvancedSettings = (value) => {
+    haptic("impactLight");
+    const selected = advancedSettingsReplies.find((r) => r.value === value);
+    addMessage(selected?.label || value, false);
+
+    if (value === "yes") {
+      setUserData((prev) => ({ ...prev, wantsAdvanced: true }));
+      // For now, skip advanced input and go to plan
+      // TODO: Add advanced input fields
+    }
+
+    // Generate plan
+    proceedToPlan();
+  };
+
+  // Summary
+  const handleSummary = (value) => {
+    haptic("impactLight");
+    const selected = summaryReplies.find((r) => r.value === value);
+    addMessage(selected?.label || value, false);
+
+    if (value === "confirm") {
+      confirmPlan();
+      setStep(STEPS.DONE);
+      addMessage("Your plan is saved. Let's get to work!", true, "You're all set! ✅");
+    } else {
+      addMessage("Tell me what you'd like to change.", true, "Adjustments");
+      setShowTextInput(true);
+    }
+  };
+
+  // =============================================================================
+  // PLAN GENERATION
+  // =============================================================================
+
   const proceedToPlan = async () => {
+    const planData = {
+      goal_type: userData.goal_type || "fitness",
+      sport: userData.sport || "general",
+      target_type: userData.target_type,
+      target_details: userData.target_details,
+      plan_weeks: userData.plan_weeks || 8,
+      starting_point: userData.starting_point || "on_off",
+      event_name: userData.eventName,
+      weeks_until_event: userData.weeksToEvent,
+      days_per_week: 3, // Default, can be made configurable
+    };
+
+    console.log("[Plan inputs]", planData);
+
     setStep(STEPS.PLAN);
     setLoading(true);
 
     try {
-      const planRes = await generatePlan(userData);
+      const planRes = await generatePlan(planData);
 
       if (planRes?.ok && planRes?.data) {
         setUserData((prev) => ({ ...prev, plan: planRes.data }));
         addMessage(formatPlan(planRes.data), true, "Your training plan 📋");
+
         setStep(STEPS.SUMMARY);
         const summaryRes = await getSummary(planRes.data);
         if (summaryRes?.ok && summaryRes?.data?.summary) {
           addMessage(summaryRes.data.summary, true, "Summary");
         }
-      }
-    } catch (err) {
-      addMessage("Something went wrong. Try again.", true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickReply = (value) => {
-    haptic("impactLight");
-
-    // Om "Other" - visa input-fältet
-    if (value === "other") {
-      setShowGoalInput(true);
-      return;
-    }
-
-    addMessage(value, false);
-    setLoading(true);
-
-    interpretGoal(value).then((res) => {
-      if (res?.ok && res?.data) {
-        const data = res.data;
-        setUserData((prev) => ({ ...prev, goal: value, ...data }));
-        setLoading(false);
-
-        // Om needs_followup === true → gå till FOLLOWUP först
-        if (data.needs_followup === true) {
-          setStep(STEPS.FOLLOWUP);
-          addMessage("To build your plan, I need one more detail.", true, "Which event? 🏁");
-        } else {
-          // Annars gå direkt till CURRENT_FORM (alla ska genom detta steg)
-          setStep(STEPS.CURRENT_FORM);
-          addMessage("Pick the one that fits you best 👇", true, "How are you training right now?");
-        }
       } else {
-        addMessage("Hmm, try describing your goal again.", true);
-        setLoading(false);
-      }
-    }).catch(() => {
-      addMessage("Something went wrong. Try again.", true);
-      setLoading(false);
-    });
-  };
-
-  const handleSubmit = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-
-    haptic("impactLight");
-    addMessage(text, false);
-    setInput("");
-    setLoading(true);
-
-    try {
-      switch (step) {
-        case STEPS.GOAL: {
-          const res = await interpretGoal(text);
-          if (res?.ok && res?.data) {
-            const data = res.data;
-            setUserData((prev) => ({ ...prev, goal: text, ...data }));
-
-            // KRITISK LOGIK: Endast om needs_followup === true går vi till FOLLOWUP
-            if (data.needs_followup === true) {
-              setStep(STEPS.FOLLOWUP);
-              addMessage("To build your plan, I need one more detail.", true, "Which event? 🏁");
-            } else {
-              // needs_followup === false → gå till CURRENT_FORM (alla ska igenom detta steg)
-              setStep(STEPS.CURRENT_FORM);
-              addMessage("Pick the one that fits you best 👇", true, "How are you training right now?");
-            }
-          } else {
-            addMessage("Hmm, try describing your goal again.", true);
-          }
-          break;
-        }
-
-        case STEPS.FOLLOWUP: {
-          // Look up the event online
-          const eventRes = await lookupEvent(text);
-
-          if (eventRes?.ok && eventRes?.data?.found) {
-            const { eventName, eventDate, location, distance } = eventRes.data;
-
-            // Calculate weeks to event
-            const dateObj = new Date(eventDate);
-            const today = new Date();
-            const diffTime = dateObj.getTime() - today.getTime();
-            const weeksToEvent = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
-
-            // Store pending data for confirmation
-            setPendingEventData({ eventName, eventDate, weeksToEvent });
-
-            // Format the date nicely
-            const formattedDate = dateObj.toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            });
-
-            // Build confirmation message
-            let confirmMsg = `📅 ${eventName}\n🗓️ ${formattedDate}`;
-            if (location) confirmMsg += `\n📍 ${location}`;
-            if (distance) confirmMsg += `\n🏃 ${distance}`;
-
-            setStep(STEPS.EVENT_CONFIRM);
-            addMessage(confirmMsg, true, "I found it! 🔍");
-          } else {
-            // Event not found, ask for manual date entry
-            setUserData((prev) => ({ ...prev, eventName: text }));
-            setStep(STEPS.EVENT_DATE);
-            addMessage("Enter the date or pick an option 👇", true, "When is your event?");
-          }
-          break;
-        }
-
-        case STEPS.EVENT_DATE: {
-          // Spara eventDate och beräkna veckor
-          setShowEventDateInput(false);
-
-          // Beräkna veckor till event (enkel beräkning)
-          const eventDate = new Date(text);
-          const today = new Date();
-          const diffTime = eventDate.getTime() - today.getTime();
-          const weeksToEvent = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
-
-          setUserData((prev) => ({ ...prev, eventDate: text, weeksToEvent }));
-
-          // System-meddelande (inte AI)
-          if (weeksToEvent > 0) {
-            messageCounter.current += 1;
-            setMessages((prev) => [...prev, {
-              id: `${Date.now()}-${messageCounter.current}`,
-              text: `We have ${weeksToEvent} weeks to work with.\nThat's enough time to build a solid plan.`,
-              isAI: false,
-              isSystem: true
-            }]);
-          }
-
-          // Gå vidare till CURRENT_FORM
-          setTimeout(() => {
-            setStep(STEPS.CURRENT_FORM);
-            addMessage("Pick the one that fits you best 👇", true, "How are you training right now?");
-          }, 500);
-          break;
-        }
-
-        case STEPS.SUMMARY: {
-          if (text.toLowerCase().includes("yes") || text.toLowerCase().includes("ok") || text.toLowerCase().includes("good") || text.toLowerCase().includes("looks good")) {
-            await confirmPlan();
-            setStep(STEPS.DONE);
-            addMessage("Your plan is saved. Let's get to work! 💪", true, "You're all set! ✅");
-          } else {
-            addMessage("Tell me what you'd like to change.", true, "Adjustments");
-          }
-          break;
-        }
-
-        default:
-          break;
+        addMessage("Could not generate plan. Let's try again.", true);
       }
     } catch (err) {
       addMessage("Something went wrong. Try again.", true);
@@ -503,13 +462,14 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
 
     if (plan.schedule && Array.isArray(plan.schedule)) {
       text += "Weekly schedule:\n";
-      plan.schedule.forEach((day) => {
-        text += `• ${day.day || day}: ${day.focus || day.activity || "Rest"}\n`;
-      });
-    } else if (plan.weeklySchedule) {
-      text += "Weekly schedule:\n";
-      plan.weeklySchedule.forEach((day) => {
-        text += `• ${day.day}: ${day.focus || "Rest"}\n`;
+      plan.schedule.slice(0, 1).forEach((week) => {
+        if (week.days) {
+          week.days.forEach((day) => {
+            if (day.type === "training") {
+              text += `• ${day.day}: ${day.description}\n`;
+            }
+          });
+        }
       });
     }
 
@@ -517,18 +477,184 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
       text += `\n${data.explanation}`;
     }
     if (plan.weeks) {
-      text += `\n${plan.weeks} weeks, ${plan.days_per_week || 3} days/week`;
+      text += `\n\n${plan.weeks} weeks, ${plan.days_per_week || 3} days/week`;
     }
 
     return text || "Plan created.";
   };
+
+  // =============================================================================
+  // TEXT INPUT HANDLER
+  // =============================================================================
+
+  const handleSubmit = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    haptic("impactLight");
+    addMessage(text, false);
+    setInput("");
+    setShowTextInput(false);
+    setLoading(true);
+
+    try {
+      switch (step) {
+        case STEPS.GOAL_TYPE: {
+          // Free text goal
+          const res = await interpretGoal(text);
+          if (res?.ok && res?.data) {
+            setUserData((prev) => ({ ...prev, goal: text, ...res.data }));
+            if (res.data.needs_followup) {
+              setStep(STEPS.EVENT_NAME);
+              setShowTextInput(true);
+              addMessage("Type the name below and I'll look it up.", true, "Which event? 🏁");
+            } else {
+              goToStep(STEPS.TARGET_GOAL, "If you want, we can lock the plan to a specific target.", "Set a target?");
+            }
+          }
+          break;
+        }
+
+        case STEPS.EVENT_NAME: {
+          const eventRes = await lookupEvent(text);
+
+          if (eventRes?.ok && eventRes?.data?.found) {
+            const { eventName, eventDate, location, distance, sport } = eventRes.data;
+            const dateObj = new Date(eventDate);
+            const today = new Date();
+            const weeksToEvent = Math.ceil((dateObj - today) / (1000 * 60 * 60 * 24 * 7));
+
+            setPendingEventData({ eventName, eventDate, weeksToEvent, sport, distance });
+
+            const formattedDate = dateObj.toLocaleDateString('en-US', {
+              month: 'long', day: 'numeric', year: 'numeric'
+            });
+
+            let msg = `${eventName}`;
+            if (distance) msg += `\n${distance}`;
+            msg += ` · ${formattedDate}`;
+            if (location) msg += ` · ${location}`;
+            msg += `\n\nDoes this look right?`;
+
+            setStep(STEPS.EVENT_CONFIRM);
+            addMessage(msg, true, "I found this event 🔍");
+          } else {
+            setUserData((prev) => ({ ...prev, eventName: text }));
+            setStep(STEPS.EVENT_DISTANCE);
+            setShowTextInput(true);
+            addMessage(
+              "I couldn't confidently identify this event.\n\nThat's totally fine — let's fill in the details manually.",
+              true,
+              "No worries 👍"
+            );
+            setTimeout(() => addMessage("What's the distance?", true, "Distance 🏃"), 800);
+          }
+          break;
+        }
+
+        case STEPS.EVENT_DISTANCE: {
+          setUserData((prev) => ({ ...prev, distance: text }));
+          setStep(STEPS.EVENT_DATE);
+          setShowTextInput(true);
+          addMessage("When is the event?", true, "Date 📅");
+          break;
+        }
+
+        case STEPS.EVENT_DATE: {
+          const dateObj = new Date(text);
+          if (!isNaN(dateObj.getTime())) {
+            const today = new Date();
+            const weeksToEvent = Math.ceil((dateObj - today) / (1000 * 60 * 60 * 24 * 7));
+            setUserData((prev) => ({ ...prev, eventDate: text, weeksToEvent }));
+          }
+          goToStep(STEPS.PLAN_LENGTH, "Pick what works for you 👇", "How long should the plan be?");
+          break;
+        }
+
+        case STEPS.TARGET_DETAILS: {
+          setUserData((prev) => ({ ...prev, target_details: text }));
+          goToStep(STEPS.PLAN_LENGTH, "Pick what works for you 👇", "How long should the plan be?");
+          break;
+        }
+
+        case STEPS.SUMMARY: {
+          // User wants changes
+          addMessage("Let me adjust the plan for you.", true, "Adjusting...");
+          // TODO: Implement plan adjustment
+          break;
+        }
+
+        default:
+          break;
+      }
+    } catch (err) {
+      addMessage("Something went wrong. Try again.", true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =============================================================================
+  // RENDER
+  // =============================================================================
+
+  const getCurrentReplies = () => {
+    switch (step) {
+      case STEPS.GOAL_TYPE: return showTextInput ? null : goalTypeReplies;
+      case STEPS.EVENT_CONFIRM: return eventConfirmReplies;
+      case STEPS.TARGET_GOAL: return targetGoalReplies;
+      case STEPS.TARGET_TYPE: return targetTypeReplies;
+      case STEPS.PLAN_LENGTH: return planLengthReplies;
+      case STEPS.STARTING_POINT: return startingPointReplies;
+      case STEPS.ADVANCED_SETTINGS: return advancedSettingsReplies;
+      case STEPS.SUMMARY: return summaryReplies;
+      default: return null;
+    }
+  };
+
+  const getCurrentHandler = () => {
+    switch (step) {
+      case STEPS.GOAL_TYPE: return handleGoalType;
+      case STEPS.EVENT_CONFIRM: return handleEventConfirm;
+      case STEPS.TARGET_GOAL: return handleTargetGoal;
+      case STEPS.TARGET_TYPE: return handleTargetType;
+      case STEPS.PLAN_LENGTH: return handlePlanLength;
+      case STEPS.STARTING_POINT: return handleStartingPoint;
+      case STEPS.ADVANCED_SETTINGS: return handleAdvancedSettings;
+      case STEPS.SUMMARY: return handleSummary;
+      default: return () => {};
+    }
+  };
+
+  const getPlaceholder = () => {
+    switch (step) {
+      case STEPS.GOAL_TYPE: return "Describe your goal...";
+      case STEPS.EVENT_NAME: return "🏁 Event name...";
+      case STEPS.EVENT_DISTANCE: return "🏃 e.g. 10 km, Half marathon...";
+      case STEPS.EVENT_DATE: return "📅 e.g. June 15, 2025";
+      case STEPS.TARGET_DETAILS: {
+        // Dynamic placeholder based on target type
+        if (userData.target_type === "strength") {
+          return "💪 e.g. Bench 80 kg → 90 kg";
+        } else if (userData.target_type === "endurance") {
+          return "🏃 e.g. 5 km in under 25 min";
+        } else {
+          return "📅 e.g. Train 3x/week for 8 weeks";
+        }
+      }
+      default: return "Type here...";
+    }
+  };
+
+  const currentReplies = getCurrentReplies();
+  const currentHandler = getCurrentHandler();
+  const showInput = showTextInput && [STEPS.GOAL_TYPE, STEPS.EVENT_NAME, STEPS.EVENT_DISTANCE, STEPS.EVENT_DATE, STEPS.TARGET_DETAILS, STEPS.SUMMARY].includes(step);
 
   return (
     <DynamicSafeAreaView style={styles.screen}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -552,18 +678,17 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
                 Let me help you create a personal training plan
               </Text>
               <TouchableOpacity style={styles.startButton} onPress={handleStart}>
-                <Text style={styles.startButtonText}>Get started</Text>
+                <Text style={styles.startButtonText}>Start planning</Text>
               </TouchableOpacity>
             </Animated.View>
           )}
 
-          {/* Messages */}
           {messages.map((msg) => (
             <View
               key={msg.id}
               style={[
                 styles.messageBubble,
-                msg.isSystem ? styles.systemBubble : msg.isAI ? styles.aiBubble : styles.userBubble,
+                msg.isAI ? styles.aiBubble : styles.userBubble,
               ]}
             >
               {msg.isAI && msg.title && (
@@ -580,15 +705,15 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
                   }}
                 />
               ) : (
-                <Text style={[styles.messageText, msg.isSystem ? styles.systemText : msg.isAI ? styles.aiText : styles.userText]}>
+                <Text style={[styles.messageText, msg.isAI ? styles.aiText : styles.userText]}>
                   {msg.text}
                 </Text>
               )}
             </View>
           ))}
 
-          {/* Quick reply pills - visas direkt under senaste meddelandet */}
-          {!typingMessageId && !loading && (
+          {/* Quick reply pills */}
+          {!typingMessageId && !loading && currentReplies && (
             <Animated.View
               style={[
                 styles.inlinePillsContainer,
@@ -603,52 +728,12 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
                 }
               ]}
             >
-              {step === STEPS.GOAL && !showGoalInput && quickReplies.map((item) => (
+              {currentReplies.map((item) => (
                 <TouchableOpacity
                   key={item.value}
                   style={styles.quickReplyChip}
                   activeOpacity={0.7}
-                  onPress={() => handleQuickReply(item.value)}
-                >
-                  <Text style={styles.quickReplyText}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-              {step === STEPS.EVENT_CONFIRM && eventConfirmQuickReplies.map((item) => (
-                <TouchableOpacity
-                  key={item.value}
-                  style={styles.quickReplyChip}
-                  activeOpacity={0.7}
-                  onPress={() => handleEventConfirmQuickReply(item.value)}
-                >
-                  <Text style={styles.quickReplyText}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-              {step === STEPS.EVENT_DATE && !showEventDateInput && eventDateQuickReplies.map((item) => (
-                <TouchableOpacity
-                  key={item.value}
-                  style={styles.quickReplyChip}
-                  activeOpacity={0.7}
-                  onPress={() => handleEventDateQuickReply(item.value)}
-                >
-                  <Text style={styles.quickReplyText}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-              {step === STEPS.CURRENT_FORM && currentFormQuickReplies.map((item) => (
-                <TouchableOpacity
-                  key={item.value}
-                  style={styles.quickReplyChip}
-                  activeOpacity={0.7}
-                  onPress={() => handleCurrentFormQuickReply(item.value)}
-                >
-                  <Text style={styles.quickReplyText}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-              {step === STEPS.ADVANCED_DATA && advancedDataQuickReplies.map((item) => (
-                <TouchableOpacity
-                  key={item.value}
-                  style={styles.quickReplyChip}
-                  activeOpacity={0.7}
-                  onPress={() => handleAdvancedDataQuickReply(item.value)}
+                  onPress={() => currentHandler(item.value)}
                 >
                   <Text style={styles.quickReplyText}>{item.label}</Text>
                 </TouchableOpacity>
@@ -675,7 +760,7 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
           )}
         </ScrollView>
 
-        {/* Continue button for INTRO step (fade in when typing is done) */}
+        {/* Continue button for INTRO */}
         {step === STEPS.INTRO && !typingMessageId && (
           <Animated.View
             style={[
@@ -689,29 +774,20 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
                 })}],
               }
             ]}
-            pointerEvents="auto"
           >
             <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-              <Text style={styles.continueButtonText}>Let's get started</Text>
+              <Text style={styles.continueButtonText}>Continue</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
 
-        {/* Input - bara för FOLLOWUP eller när "Other" klickades */}
-        {(step === STEPS.FOLLOWUP || (step === STEPS.GOAL && showGoalInput) || (step === STEPS.EVENT_DATE && showEventDateInput) || step === STEPS.SUMMARY) && !typingMessageId && (
+        {/* Text input */}
+        {showInput && !typingMessageId && (
           <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
-                placeholder={
-                  step === STEPS.GOAL
-                    ? "For example: a race, getting fitter, coming back after a break…"
-                    : step === STEPS.FOLLOWUP
-                    ? "For example: Berlin Marathon, Half marathon in October…"
-                    : step === STEPS.EVENT_DATE
-                    ? "For example: October 12, 2025"
-                    : "Type here..."
-                }
+                placeholder={getPlaceholder()}
                 placeholderTextColor={theme.colors.textMuted}
                 value={input}
                 onChangeText={setInput}
@@ -726,8 +802,8 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
               >
                 <Feather
                   name="arrow-up"
-                  size={20}
-                  color={input.trim() && !loading ? theme.colors.white : theme.colors.textMuted}
+                  size={18}
+                  color={input.trim() && !loading ? theme.colors.black : theme.colors.textMuted}
                 />
               </TouchableOpacity>
             </View>
@@ -737,6 +813,10 @@ I'll ask a few quick questions. Takes about 2 minutes ⏱️`;
     </DynamicSafeAreaView>
   );
 }
+
+// =============================================================================
+// STYLES
+// =============================================================================
 
 const styles = StyleSheet.create({
   screen: {
@@ -750,14 +830,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.screenPadding,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
   },
   headerTitle: {
     fontSize: 17,
@@ -773,37 +845,37 @@ const styles = StyleSheet.create({
   },
   welcomeContainer: {
     alignItems: "center",
-    paddingVertical: theme.spacing.xxl * 2,
+    paddingVertical: theme.spacing.xxl,
   },
   welcomeEmoji: {
-    fontSize: 56,
-    marginBottom: theme.spacing.lg,
+    fontSize: 48,
+    marginBottom: theme.spacing.md,
   },
   welcomeTitle: {
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "600",
     color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
   },
   welcomeSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: theme.colors.textSecondary,
     textAlign: "center",
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
   },
   startButton: {
-    backgroundColor: theme.colors.purple,
+    backgroundColor: theme.colors.yellow,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.full,
+    borderRadius: theme.radius.md,
   },
   startButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    color: theme.colors.white,
+    color: theme.colors.black,
   },
   messageBubble: {
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   aiBubble: {
     alignSelf: "flex-start",
@@ -812,54 +884,44 @@ const styles = StyleSheet.create({
   },
   userBubble: {
     alignSelf: "flex-end",
-    maxWidth: "85%",
+    maxWidth: "80%",
     backgroundColor: "transparent",
-    borderWidth: 1.5,
-    borderColor: theme.colors.purple,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm + 2,
-    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.yellow,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs + 2,
+    borderRadius: theme.radius.sm,
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
   },
   aiText: {
     color: theme.colors.text,
     fontWeight: "400",
   },
   aiTitle: {
-    fontSize: 22,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "600",
     color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
   },
   userText: {
     color: theme.colors.text,
-  },
-  systemBubble: {
-    alignSelf: "center",
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    maxWidth: "90%",
-  },
-  systemText: {
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    fontStyle: "italic",
+    fontSize: 14,
   },
   doneButton: {
     alignSelf: "center",
-    backgroundColor: theme.colors.green,
+    backgroundColor: theme.colors.yellow,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.full,
-    marginTop: theme.spacing.lg,
+    borderRadius: theme.radius.md,
+    marginTop: theme.spacing.md,
   },
   doneButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    color: theme.colors.white,
+    color: theme.colors.black,
   },
   inputArea: {
     paddingHorizontal: theme.spacing.screenPadding,
@@ -869,24 +931,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.lg,
-    paddingLeft: theme.spacing.md,
-    paddingRight: 6,
-    height: 52,
+    borderRadius: theme.radius.sm,
+    paddingLeft: theme.spacing.sm,
+    paddingRight: 4,
+    height: 44,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     color: theme.colors.text,
-    paddingRight: theme.spacing.sm,
+    paddingRight: theme.spacing.xs,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.purple,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.yellow,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -894,45 +956,39 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceHover,
   },
   continueButton: {
-    backgroundColor: theme.colors.purple,
+    backgroundColor: theme.colors.yellow,
     paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     alignItems: "center",
   },
   continueButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    color: theme.colors.white,
-  },
-  quickRepliesContainer: {
-    marginBottom: theme.spacing.sm,
-  },
-  quickRepliesContent: {
-    gap: theme.spacing.sm,
+    color: theme.colors.black,
   },
   quickReplyChip: {
     alignSelf: "flex-start",
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1.5,
-    borderColor: theme.colors.purple,
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: theme.colors.yellow,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
   quickReplyText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
   },
   inlinePillsContainer: {
     flexDirection: "column",
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
   },
   typingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.textSecondary,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.textMuted,
   },
 });

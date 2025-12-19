@@ -30,13 +30,10 @@ You ONLY respond with JSON when requested.`;
 // Fallbacks
 const FALLBACKS = {
   interpretGoal: {
-    goal_type: "unknown",
-    sport: "unknown",
+    goal_type: "fitness",
+    sport: "general",
     confidence: "low",
-    needs_followup: true,
-  },
-  eventFollowup: {
-    question: "What event are you aiming for?",
+    needs_followup: false,
   },
   generatePlan: {
     plan: {
@@ -45,6 +42,12 @@ const FALLBACKS = {
       schedule: [],
     },
     explanation: "Could not generate plan right now.",
+  },
+  trainingContext: {
+    progression_style: "conservative",
+    weekly_ramp: "slow",
+    recovery_priority: "high",
+    assumptions: [],
   },
 };
 
@@ -102,149 +105,28 @@ app.post("/api/ai/onboarding", async (req, res) => {
           return res.json({ ok: true, data: FALLBACKS.interpretGoal });
         }
 
-        const prompt = `Analysera detta träningsmål och returnera ENDAST JSON:
+        const prompt = `Analyze this training goal and return ONLY JSON:
 
-Mål: "${goalText}"
+Goal: "${goalText}"
 
 Format:
 {
-  "goal_type": "event | general_fitness | comeback | unknown",
-  "sport": "cycling | running | triathlon | gym | other | unknown",
+  "goal_type": "event | strength | fitness | other",
+  "sport": "running | cycling | triathlon | gym | swimming | other",
   "confidence": "high | medium | low",
   "needs_followup": true | false
-}`;
+}
+
+Rules:
+- needs_followup = true ONLY if user mentions a specific race/event
+- goal_type = "event" if they mention a race, marathon, competition
+- goal_type = "strength" if they want to get stronger, lift more
+- goal_type = "fitness" for general health, staying active
+- goal_type = "other" if unclear`;
 
         const text = await callAI(SYSTEM_PROMPT, prompt, 256);
         const parsed = safeJsonParse(text);
         return res.json({ ok: true, data: parsed || FALLBACKS.interpretGoal });
-      }
-
-      // ==================== EVENT_FOLLOWUP ====================
-      case "EVENT_FOLLOWUP": {
-        const { missingInfo } = payload || {};
-        // missingInfo can be: "event_name", "event_date", "sport"
-
-        const questions = {
-          event_name: "What event are you aiming for?",
-          event_date: "When is the event?",
-          sport: "What sport is it?",
-        };
-
-        const question = questions[missingInfo] || "Tell me more about your goal.";
-        return res.json({ ok: true, data: { question } });
-      }
-
-      // ==================== GENERATE_PLAN ====================
-      case "GENERATE_PLAN": {
-        const {
-          goal_type,
-          sport,
-          event_name,
-          event_date,
-          weeks_until_event,
-          current_training,
-          days_per_week,
-          injuries,
-          tools,
-        } = payload || {};
-
-        const prompt = `Create a training program. Return ONLY JSON.
-
-Input:
-- Goal type: ${goal_type || "general_fitness"}
-- Sport: ${sport || "unknown"}
-- Event: ${event_name || "none specific"}
-- Date: ${event_date || "none"}
-- Weeks left: ${weeks_until_event || "unknown"}
-- Current training: ${current_training || "unknown"}
-- Days/week: ${days_per_week || 3}
-- Injuries: ${injuries || "none"}
-- Equipment: ${tools || "none"}
-
-Rules:
-- Consistency over intensity
-- Include rest days
-- Realistic for everyday life
-- Max ${days_per_week || 3} training days per week
-
-Format:
-{
-  "plan": {
-    "weeks": number,
-    "days_per_week": number,
-    "schedule": [
-      {
-        "week": 1,
-        "days": [
-          { "day": "Monday", "type": "training | rest", "description": "short description" }
-        ]
-      }
-    ]
-  },
-  "explanation": "Max 5 sentences about the plan"
-}`;
-
-        const text = await callAI(SYSTEM_PROMPT, prompt, 2048);
-        const parsed = safeJsonParse(text);
-        return res.json({ ok: true, data: parsed || FALLBACKS.generatePlan });
-      }
-
-      // ==================== SUMMARY ====================
-      case "SUMMARY": {
-        const { plan, goal_type, sport, event_name, weeks_until_event } = payload || {};
-
-        const summaryPrompt = `Explain this training plan calmly and clearly to the user.
-
-Plan:
-- Goal: ${goal_type || "general training"}
-- Sport: ${sport || "unknown"}
-- Event: ${event_name || "none specific"}
-- Weeks: ${weeks_until_event || "flexible"}
-- Days per week: ${plan?.days_per_week || 3}
-
-Write 3-4 sentences that explain:
-1. What the plan prioritizes
-2. Why it's realistic
-3. What's intentionally kept light
-
-ALWAYS end with this exact question:
-"Does this feel realistic for you?"
-
-No hype. No technical jargon. Calm tone.`;
-
-        const text = await callAI(SYSTEM_PROMPT, summaryPrompt, 512);
-        const summary = text || "The plan focuses on building a sustainable routine. Does this feel realistic for you?";
-        return res.json({ ok: true, data: { summary } });
-      }
-
-      // ==================== CONFIRM ====================
-      case "CONFIRM": {
-        // No AI needed - just acknowledge
-        return res.json({
-          ok: true,
-          data: {
-            confirmed: true,
-            message: "This is just a starting point. We'll adjust the plan as we go.",
-          },
-        });
-      }
-
-      // ==================== CHAT ====================
-      case "CHAT": {
-        const { message, context } = payload || {};
-        if (!message) {
-          return res.json({ ok: true, data: { reply: "What's on your mind?" } });
-        }
-
-        const chatPrompt = `User says: "${message}"
-
-${context ? `Context: ${context}` : ""}
-
-Respond briefly and helpfully. Focus on training and health. Max 2-3 sentences.`;
-
-        const text = await callAI(SYSTEM_PROMPT, chatPrompt, 256);
-        const reply = text || "I didn't quite catch that. Can you say it again?";
-        return res.json({ ok: true, data: { reply } });
       }
 
       // ==================== LOOKUP_EVENT ====================
@@ -290,6 +172,268 @@ If you're not confident this is a real event, return:
           return res.json({ ok: true, data: parsed });
         }
         return res.json({ ok: true, data: { found: false } });
+      }
+
+      // ==================== BUILD_TRAINING_CONTEXT ====================
+      case "BUILD_TRAINING_CONTEXT": {
+        const {
+          goal_type,
+          sport,
+          target_type,
+          target_details,
+          starting_point,
+          plan_weeks,
+          event_name,
+          weeks_until_event,
+        } = payload || {};
+
+        const contextPrompt = `Based on this user profile, determine training context. Return ONLY JSON.
+
+User profile:
+- Goal type: ${goal_type || "fitness"}
+- Sport: ${sport || "general"}
+- Target type: ${target_type || "none"}
+- Target details: ${target_details || "none"}
+- Starting point: ${starting_point || "on_off"}
+- Plan weeks: ${plan_weeks || "8"}
+- Event: ${event_name || "none"}
+- Weeks until event: ${weeks_until_event || "none"}
+
+Determine:
+1. progression_style: How aggressive should weekly increases be?
+   - "conservative" = slow, safe, for beginners or returning
+   - "moderate" = standard progression
+   - "aggressive" = faster progression for experienced athletes
+
+2. weekly_ramp: How much volume increase per week?
+   - "slow" = 5-10% increase
+   - "normal" = 10-15% increase
+   - "fast" = 15-20% increase
+
+3. recovery_priority: How much rest emphasis?
+   - "high" = extra rest days, deload weeks
+   - "medium" = standard rest
+   - "low" = minimal rest (experienced only)
+
+4. assumptions: List any assumptions made about the user
+
+Format:
+{
+  "progression_style": "conservative | moderate | aggressive",
+  "weekly_ramp": "slow | normal | fast",
+  "recovery_priority": "high | medium | low",
+  "assumptions": ["assumption 1", "assumption 2"]
+}`;
+
+        const text = await callAI(SYSTEM_PROMPT, contextPrompt, 512);
+        const parsed = safeJsonParse(text);
+        return res.json({ ok: true, data: parsed || FALLBACKS.trainingContext });
+      }
+
+      // ==================== GENERATE_PLAN ====================
+      case "GENERATE_PLAN": {
+        const {
+          goal_type,
+          sport,
+          target_type,
+          target_details,
+          starting_point,
+          plan_weeks,
+          adaptive,
+          event_name,
+          weeks_until_event,
+          days_per_week,
+          // Advanced (optional)
+          ftp,
+          pace,
+          max_lifts,
+        } = payload || {};
+
+        // Determine weeks and mode
+        let weeks = plan_weeks || 8;
+        let planMode = "fixed"; // fixed = clear end goal, adaptive = rolling
+
+        if (adaptive === true || plan_weeks === null) {
+          // Adaptive mode: 4-week rolling plan, low aggression, focus on consistency
+          weeks = 4;
+          planMode = "adaptive";
+        } else if (weeks_until_event && weeks_until_event > 0) {
+          weeks = Math.min(weeks_until_event, 16);
+        }
+
+        // Determine optimization focus
+        let optimization = "consistency"; // default
+        if (target_type && target_details) {
+          optimization = `${target_type}: ${target_details}`;
+        } else if (event_name) {
+          optimization = `event: ${event_name}`;
+        }
+
+        const prompt = `Create a training program. Return ONLY JSON.
+
+User profile:
+- Goal type: ${goal_type || "fitness"}
+- Sport: ${sport || "general"}
+- Target: ${target_type ? `${target_type} - ${target_details || "general"}` : "none (optimize for consistency)"}
+- Starting point: ${starting_point || "on_off"}
+- Event: ${event_name || "none"}
+- Weeks until event: ${weeks_until_event || "none"}
+- Days per week: ${days_per_week || 3}
+- Plan mode: ${planMode}
+${ftp ? `- FTP: ${ftp}` : ""}
+${pace ? `- Pace: ${pace}` : ""}
+${max_lifts ? `- Max lifts: ${max_lifts}` : ""}
+
+OPTIMIZATION RULE:
+${target_type ? `This plan OPTIMIZES toward: ${optimization}` : "No specific target → OPTIMIZE for CONSISTENCY and habit-building"}
+
+Starting point meanings:
+- "regular" = training 3+ times/week consistently
+- "on_off" = inconsistent, sometimes trains
+- "returning" = just getting back after break
+- "not_training" = hasn't trained in months
+
+Plan mode meanings:
+- "fixed" = ${weeks} weeks with clear progression toward goal
+- "adaptive" = 4-week rolling plan, low intensity, prioritize recovery and consistency
+
+Rules:
+- Consistency over intensity
+- Include rest days
+- Realistic for everyday life
+- Max ${days_per_week || 3} training days per week
+- ${weeks} weeks total
+- If starting_point is "not_training" or "returning": start very easy
+- If target_type is "strength": focus on compound lifts
+- If target_type is "endurance": focus on aerobic base
+- If target_type is "consistency": focus on habit building
+- If plan_mode is "adaptive": keep intensity LOW, prioritize recovery, no aggressive progression
+
+Format:
+{
+  "plan": {
+    "weeks": ${weeks},
+    "days_per_week": ${days_per_week || 3},
+    "mode": "${planMode}",
+    "schedule": [
+      {
+        "week": 1,
+        "focus": "week focus description",
+        "days": [
+          { "day": "Monday", "type": "training", "description": "short description" },
+          { "day": "Tuesday", "type": "rest", "description": "rest or light activity" },
+          { "day": "Wednesday", "type": "training", "description": "short description" },
+          { "day": "Thursday", "type": "rest", "description": "rest" },
+          { "day": "Friday", "type": "training", "description": "short description" },
+          { "day": "Saturday", "type": "rest", "description": "rest" },
+          { "day": "Sunday", "type": "rest", "description": "rest or light activity" }
+        ]
+      }
+    ]
+  },
+  "explanation": "3-5 sentences explaining the plan philosophy and progression"
+}
+
+Only include week 1 in the schedule (the pattern repeats with progression).`;
+
+        const text = await callAI(SYSTEM_PROMPT, prompt, 2048);
+        const parsed = safeJsonParse(text);
+        return res.json({ ok: true, data: parsed || FALLBACKS.generatePlan });
+      }
+
+      // ==================== SUMMARY ====================
+      case "SUMMARY": {
+        const {
+          plan,
+          goal_type,
+          sport,
+          target_type,
+          target_details,
+          event_name,
+          plan_weeks,
+          starting_point,
+        } = payload || {};
+
+        const summaryPrompt = `Explain this training plan calmly and clearly to the user.
+
+Context:
+- Goal: ${goal_type || "general training"}
+- Sport: ${sport || "general"}
+- Target: ${target_type || "none"} ${target_details ? `(${target_details})` : ""}
+- Event: ${event_name || "none"}
+- Duration: ${plan_weeks || plan?.plan?.weeks || 8} weeks
+- Starting point: ${starting_point || "on_off"}
+- Days per week: ${plan?.plan?.days_per_week || 3}
+
+Write 3-4 sentences that explain:
+1. What the plan prioritizes
+2. Why it's realistic given their starting point
+3. What's intentionally kept light
+
+ALWAYS start with this exact line (builds trust):
+"This plan is built around your goal, starting point, and the time you chose."
+
+Then add your explanation.
+
+ALWAYS end with this exact question:
+"Does this feel realistic for you?"
+
+No hype. No technical jargon. Calm tone.`;
+
+        const text = await callAI(SYSTEM_PROMPT, summaryPrompt, 512);
+        const summary = text || "The plan focuses on building a sustainable routine. Does this feel realistic for you?";
+        return res.json({ ok: true, data: { summary } });
+      }
+
+      // ==================== ADJUST_PLAN ====================
+      case "ADJUST_PLAN": {
+        const { currentPlan, adjustmentRequest } = payload || {};
+
+        const adjustPrompt = `The user wants to adjust their training plan.
+
+Current plan summary:
+${JSON.stringify(currentPlan?.plan || currentPlan, null, 2)}
+
+User's request:
+"${adjustmentRequest}"
+
+Make the requested adjustment and return the updated plan in the same JSON format.
+Keep the same structure, just modify based on user feedback.
+
+If the request is unclear, make a reasonable interpretation.`;
+
+        const text = await callAI(SYSTEM_PROMPT, adjustPrompt, 2048);
+        const parsed = safeJsonParse(text);
+        return res.json({ ok: true, data: parsed || currentPlan });
+      }
+
+      // ==================== CONFIRM ====================
+      case "CONFIRM": {
+        return res.json({
+          ok: true,
+          data: {
+            confirmed: true,
+            message: "This is just a starting point. We'll adjust the plan as we go.",
+          },
+        });
+      }
+
+      // ==================== CHAT ====================
+      case "CHAT": {
+        const { message, context } = payload || {};
+        if (!message) {
+          return res.json({ ok: true, data: { reply: "What's on your mind?" } });
+        }
+
+        const chatPrompt = `User says: "${message}"
+
+${context ? `Context: ${context}` : ""}
+
+Respond briefly and helpfully. Focus on training and health. Max 2-3 sentences.`;
+
+        const text = await callAI(SYSTEM_PROMPT, chatPrompt, 256);
+        const reply = text || "I didn't quite catch that. Can you say it again?";
+        return res.json({ ok: true, data: { reply } });
       }
 
       // ==================== DEFAULT ====================
