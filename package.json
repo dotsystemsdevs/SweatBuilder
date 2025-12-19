@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.server.json",
-    "start": "node dist/server.js",
-    "dev": "npx ts-node server.ts",
+    "start": "node server.js",
     "expo": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
