@@ -189,6 +189,46 @@ Format:
         return res.json({ ok: true, data: parsed || FALLBACKS.generatePlan });
       }
 
+      // ==================== SUMMARY ====================
+      case "SUMMARY": {
+        const { plan, goal_type, sport, event_name, weeks_until_event } = payload || {};
+
+        const summaryPrompt = `Förklara denna träningsplan lugnt och tydligt för användaren.
+
+Plan:
+- Mål: ${goal_type || "allmän träning"}
+- Sport: ${sport || "okänd"}
+- Event: ${event_name || "inget specifikt"}
+- Veckor: ${weeks_until_event || "flexibelt"}
+- Dagar per vecka: ${plan?.days_per_week || 3}
+
+Skriv 3-4 meningar som förklarar:
+1. Vad planen prioriterar
+2. Varför den är realistisk
+3. Vad som medvetet hålls lätt
+
+Avsluta ALLTID med exakt denna fråga:
+"Känns det här realistiskt för dig?"
+
+Skriv på svenska. Ingen hype. Ingen teknisk jargong. Lugn ton.`;
+
+        const text = await callAI(SYSTEM_PROMPT, summaryPrompt, 512);
+        const summary = text || "Planen fokuserar på att bygga en hållbar rutin. Känns det här realistiskt för dig?";
+        return res.json({ ok: true, data: { summary } });
+      }
+
+      // ==================== CONFIRM ====================
+      case "CONFIRM": {
+        // No AI needed - just acknowledge
+        return res.json({
+          ok: true,
+          data: {
+            confirmed: true,
+            message: "Det här är bara en startpunkt. Vi anpassar planen efter hur det går.",
+          },
+        });
+      }
+
       // ==================== DEFAULT ====================
       default:
         return res.json({ ok: true, step: step || "unknown" });
