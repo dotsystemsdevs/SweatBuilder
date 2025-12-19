@@ -6,10 +6,15 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "server": "npx ts-node server.ts",
+    "server:build": "tsc -p tsconfig.server.json",
+    "server:start": "node dist/server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/slider": "^5.1.1",
@@ -40,7 +45,11 @@
   },
   "private": true,
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
     "@types/react": "~19.1.10",
+    "ts-node": "^10.9.2",
     "typescript": "~5.9.2"
   }
 }
