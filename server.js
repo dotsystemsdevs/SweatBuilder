@@ -229,6 +229,24 @@ Skriv på svenska. Ingen hype. Ingen teknisk jargong. Lugn ton.`;
         });
       }
 
+      // ==================== CHAT ====================
+      case "CHAT": {
+        const { message, context } = payload || {};
+        if (!message) {
+          return res.json({ ok: true, data: { reply: "Vad funderar du på?" } });
+        }
+
+        const chatPrompt = `Användaren säger: "${message}"
+
+${context ? `Kontext: ${context}` : ""}
+
+Svara kort och hjälpsamt. Fokusera på träning och hälsa. Max 2-3 meningar.`;
+
+        const text = await callAI(SYSTEM_PROMPT, chatPrompt, 256);
+        const reply = text || "Jag hörde inte riktigt. Kan du säga det igen?";
+        return res.json({ ok: true, data: { reply } });
+      }
+
       // ==================== DEFAULT ====================
       default:
         return res.json({ ok: true, step: step || "unknown" });

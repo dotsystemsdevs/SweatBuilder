@@ -3,20 +3,17 @@ import { haptic } from "../utils/haptics";
 import { formatMessageTimestamp } from "../utils/dateFormatters";
 import { generateId } from "../utils/idGenerator";
 import { MAX_CHAT_LENGTH } from "../constants/appConstants";
-import { getDummyResponse } from "../__mocks__/aiResponses";
+import { chat } from "../services/api";
 
 export function useAICoachSubmit({ addMessage, createNewChat, selectChat, currentChatId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [lastPrompt, setLastPrompt] = useState("");
-  const timeoutRef = useRef(null);
+  const abortRef = useRef(false);
 
   const abort = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
+    abortRef.current = true;
     setLoading(false);
   }, []);
 
@@ -54,11 +51,21 @@ export function useAICoachSubmit({ addMessage, createNewChat, selectChat, curren
       setLoading(true);
       setError(false);
       setErrorMessage(null);
+      abortRef.current = false;
 
-      // Simulate API delay with dummy response
-      const delay = 800 + Math.random() * 700;
-      timeoutRef.current = setTimeout(() => {
-        const reply = getDummyResponse(trimmed);
+      try {
+        const response = await chat(trimmed);
+
+        // Check if aborted during request
+        if (abortRef.current) return;
+
+        let reply = "Något gick fel. Försök igen.";
+        if (response?.ok && response?.data?.reply) {
+          reply = response.data.reply;
+        } else if (!response?.ok) {
+          setError(true);
+          setErrorMessage(response?.error || "Kunde inte nå servern");
+        }
 
         const aiMsg = {
           id: generateId(),
@@ -70,9 +77,24 @@ export function useAICoachSubmit({ addMessage, createNewChat, selectChat, curren
         };
 
         addMessage(aiMsg);
-        setLoading(false);
         haptic("impactLight");
-      }, delay);
+      } catch (err) {
+        if (!abortRef.current) {
+          setError(true);
+          setErrorMessage("Nätverksfel");
+          const errorMsg = {
+            id: generateId(),
+            text: "Kunde inte ansluta till servern. Försök igen.",
+            role: "assistant",
+            isAI: true,
+            timestamp: formatMessageTimestamp(),
+            streaming: false,
+          };
+          addMessage(errorMsg);
+        }
+      } finally {
+        setLoading(false);
+      }
     },
     [addMessage, createNewChat, selectChat, currentChatId, loading]
   );
