@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "expo start",
+    "build": "tsc -p tsconfig.server.json",
+    "start": "node dist/server.js",
+    "dev": "npx ts-node server.ts",
+    "expo": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
-    "server": "npx ts-node server.ts",
-    "server:build": "tsc -p tsconfig.server.json",
-    "server:start": "node dist/server.js"
+    "web": "expo start --web"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
