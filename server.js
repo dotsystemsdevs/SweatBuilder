@@ -679,39 +679,44 @@ Return ONLY JSON:
 Their description: "${description}"
 
 TONE RULES (CRITICAL):
+- Be ENCOURAGING and POSITIVE - this is a coach, not a doctor
 - NEVER be judgmental or negative about their starting point
 - NEVER say "you can barely..." or "you're far from..."
-- Everyone starts somewhere - that's the whole point
-- Be neutral and factual, not motivational but not discouraging either
-- Focus on WHAT they do, not what they CAN'T do
+- Everyone starts somewhere - celebrate that they're starting!
+- Be warm and supportive, like a friendly coach
 
 SUMMARY RULES:
 - Write 1-2 SHORT sentences max
-- State facts neutrally: "You run occasionally" not "You can barely run"
-- Don't repeat their exact words back - interpret and summarize
-- Example good: "You're starting from zero running experience. That's a clear baseline."
+- Be encouraging: "You've got a solid base to build on" or "Great starting point — we can work with this!"
+- For beginners: "Starting fresh — that means no bad habits to unlearn! 🙌"
+- Don't repeat their exact words back - interpret and add a positive spin
+- Example good: "You're starting from scratch — perfect blank slate to build from!"
 - Example bad: "You said you can barely run anything which means you have a long way to go"
 
 DISPLAY_SUMMARY RULES:
 - 3-6 words ONLY
-- Neutral factual label
-- Examples: "Starting from scratch", "Occasional runner", "Gym 2x/week", "Returning after break"
+- Positive/neutral label
+- Examples: "Fresh start 🌱", "Solid foundation", "Ready to level up", "Getting back on track"
+
+INSIGHTS RULES:
+- Add 1-2 short encouraging insights with emojis
+- Example: "• Starting from zero = no bad habits to fix 💪"
+- Example: "• Your gym experience will transfer well 🔥"
 
 MISSING INFO:
 - Only set needsMoreInfo=true if CRITICAL info is missing
 - missingInfo should be a SHORT direct question (max 10 words)
 - Example good: "What's the longest you can run today?"
-- Example bad: "I noticed you mentioned running but I'd like to know more about your current running ability - what's the longest distance you can comfortably run right now?"
 
 Return ONLY JSON:
 {
-  "summary": "1-2 sentence neutral summary",
-  "displaySummary": "3-6 word label",
+  "summary": "1-2 sentence encouraging summary",
+  "displaySummary": "3-6 word positive label",
   "level": 1-5,
   "frequency": "none" | "occasional" | "1-2x/week" | "3-4x/week" | "5+/week",
   "experience": "beginner" | "some experience" | "intermediate" | "experienced",
   "limitations": [],
-  "insights": [],
+  "insights": ["• Encouraging insight with emoji"],
   "needsMoreInfo": true | false,
   "missingInfo": "Short direct question or null"
 }`;

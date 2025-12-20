@@ -149,9 +149,9 @@ export default function AIOnboardingScreen() {
 
     // Show intro message
     addMessage(
-      "Tell me what you want to achieve. I'll build a plan that works for your life — not the other way around.",
+      "Tell me what you want to achieve — and I'll build a plan that fits your life, not the other way around. 💪\n\nNo generic templates. Just a smart plan built around you.",
       true,
-      "Welcome to SweatBuilder"
+      "Let's build something 🔥"
     );
   }, []);
 
@@ -255,7 +255,7 @@ export default function AIOnboardingScreen() {
     setStep(STEPS.GOAL_INPUT);
     setShowTextInput(true);
     addMessage(
-      "What do you want to achieve?\n\nExamples: \"get stronger\", \"run a marathon\", \"feel better\"\n\nTraining for an event? Include the name and date.",
+      "What's your goal? 🎯\n\nThe more specific, the better I can help:\n• \"Run a marathon\" → good\n• \"Run Stockholm Marathon in under 4h\" → even better!\n\nDon't overthink it — just tell me what you're going for.",
       true,
       "Step 1 — Goal"
     );
@@ -298,16 +298,16 @@ export default function AIOnboardingScreen() {
     // Add date if available and not already in displayTitle
     if (event.date) {
       const dateStr = new Date(event.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-      summary += `\n${dateStr}`;
+      summary += `\n📅 ${dateStr}`;
       if (event.daysUntil > 0) summary += ` — ${event.daysUntil} days`;
     }
 
     // Add ambition
-    summary += `\nAmbition: ${performanceTarget || label}`;
-    summary += "\n\nIs this correct?";
+    summary += `\n🎯 ${performanceTarget || label}`;
+    summary += "\n\nLet's make it happen! Is this right?";
 
     setStep(STEPS.GOAL_CONFIRM);
-    addMessage(summary, true, "Confirm your goal");
+    addMessage(summary, true, "Your goal 💪");
   };
 
   // Handle GOAL_CONFIRM
@@ -364,9 +364,9 @@ export default function AIOnboardingScreen() {
       // Current state confirmed - show coming soon
       setStep(STEPS.DONE);
       addMessage(
-        "Coming soon: Constraints, behavior profile, and your personalized training plan.",
+        "Awesome! I've got what I need to start building your plan. 🚀\n\nComing soon: Constraints, behavior profile, and your personalized training plan.",
         true,
-        "That's it for now"
+        "You're all set! 🎉"
       );
     } else {
       // User wants to change - go back to current state input
@@ -382,28 +382,28 @@ export default function AIOnboardingScreen() {
     const goal = userData.goal?.raw || "";
     const goalLower = goal.toLowerCase();
 
-    // Build a contextual question based on the goal - conversational, not bullet-heavy
-    let question = "Where are you starting from?\n\nTell me about your current training — what you do now, your experience, and anything I should know about.";
+    // Build a contextual question based on the goal - conversational with emojis
+    let question = "Now let's see where you're starting from 📍\n\nTell me about your current training — what you do, how often, and anything I should know.";
 
     // Detect goal type and customize question
     if (/marathon|half|10k|5k|run|löp|spring/i.test(goalLower)) {
-      question = "Tell me about your running.\n\nHow often do you run, what distances, and anything else that's relevant?";
+      question = "Let's talk running 🏃\n\nHow often do you run? What distances? Any injuries or limitations?";
     } else if (/triathlon|ironman|swimrun/i.test(goalLower)) {
-      question = "Tell me about your tri-training.\n\nWhich discipline is your strongest? Any gaps I should know about?";
+      question = "Let's map out your tri-fitness 🏊🚴🏃\n\nWhich discipline is your strongest? Any gaps I should know about?";
     } else if (/swim|sim/i.test(goalLower)) {
-      question = "Tell me about your swimming.\n\nHow often, what distances, and how confident are you with technique?";
+      question = "Let's talk swimming 🏊\n\nHow often, what distances, and how's your technique?";
     } else if (/cycl|bike|cykel/i.test(goalLower)) {
-      question = "Tell me about your cycling.\n\nIndoor or outdoor? Current distances and frequency?";
+      question = "Let's talk cycling 🚴\n\nIndoor or outdoor? Current distances and frequency?";
     } else if (/strength|strong|styrka|lift|bench|squat|deadlift/i.test(goalLower)) {
-      question = "Tell me about your strength training.\n\nWhat do you do now? Current numbers if you know them.";
+      question = "Let's talk strength 🏋️\n\nWhat do you do now? Any numbers you know (bench, squat, etc)?";
     } else if (/muscle|hypertrophy|massa|bigger/i.test(goalLower)) {
-      question = "Tell me about your training.\n\nExperience with lifting? Current routine?";
+      question = "Let's talk training 💪\n\nExperience with lifting? Current routine?";
     } else if (/weight|lose|fat|gå ner|viktnedgång/i.test(goalLower)) {
-      question = "Tell me about your activity level.\n\nWhat do you do now? What exercises do you enjoy?";
+      question = "Let's talk activity 🔥\n\nWhat do you do now? What types of exercise do you enjoy?";
     } else if (/health|hälsa|feel better|må bättre|energy|energi/i.test(goalLower)) {
-      question = "Tell me about your situation.\n\nHow active are you now? What's worked before?";
+      question = "Let's see where you're at 🌱\n\nHow active are you now? What's worked for you before?";
     } else if (/flex|mobility|stretch|rörlighet/i.test(goalLower)) {
-      question = "Tell me about your mobility.\n\nAny tight areas? Current stretching habits?";
+      question = "Let's talk mobility 🧘\n\nAny tight areas? Current stretching habits?";
     }
 
     setStep(STEPS.CURRENT_STATE);
@@ -811,20 +811,20 @@ export default function AIOnboardingScreen() {
             }
             if (eventData.date) {
               const dateStr = new Date(eventData.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-              summary += `\n${dateStr}`;
+              summary += `\n📅 ${dateStr}`;
               if (eventData.daysUntil > 0) summary += ` — ${eventData.daysUntil} days`;
             }
             if (!eventFound && goalData.needsEventDetails) {
               summary += "\n\n(Add a date if you have one)";
             }
-            summary += "\n\nWhat's your ambition?";
+            summary += "\n\nWhat's your ambition? 🎯";
 
             setStep(STEPS.EVENT_AMBITION);
-            addMessage(summary, true, "Your event");
+            addMessage(summary, true, "Nice! Let's do this 🔥");
           } else {
             // NON-EVENT FLOW - show normalized displayTitle for confirmation
             setStep(STEPS.GOAL_CONFIRM);
-            addMessage(`${aiDisplayTitle}\n\nIs this correct?`, true, "Confirm your goal");
+            addMessage(`${aiDisplayTitle} 💪\n\nLove it. Is this right?`, true, "Confirm your goal");
           }
           break;
         }
@@ -912,9 +912,9 @@ export default function AIOnboardingScreen() {
             confirmMsg += `\n\n${interpretation.insights.join("\n")}`;
           }
 
-          confirmMsg += "\n\nIs this correct?";
+          confirmMsg += "\n\nDoes this sound right? ✅";
 
-          addMessage(confirmMsg, true, "Confirm your starting point");
+          addMessage(confirmMsg, true, "Got it 📍");
           break;
         }
 
