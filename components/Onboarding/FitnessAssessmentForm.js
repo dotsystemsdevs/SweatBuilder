@@ -376,7 +376,7 @@ const OptionChip = ({ option, selected, onPress, type, layout, disabled, index =
           {option.sublabel && (
             <Text style={[styles.gridSublabel, selected && styles.gridSublabelSelected]}>{option.sublabel}</Text>
           )}
-          {isMulti && selected && (
+          {selected && (
             <View style={styles.gridCheckmark}>
               <Feather name="check" size={10} color="#fff" />
             </View>
@@ -550,7 +550,7 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
         } else {
           setCurrentQuestionIndex(prev => prev + 1);
         }
-      }, 300);
+      }, 200);
     } else {
       // Multi-select - toggle selection
       const current = answers[question.id] || [];
@@ -746,6 +746,12 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
             <Text style={styles.stepBadgeText}>STEP 2</Text>
           </View>
           <Text style={styles.stepTitle}>Current Status</Text>
+          {/* Progress indicator */}
+          {!showIntro && step === STEP_QUESTIONS && (
+            <Text style={styles.progressText}>
+              {currentQuestionIndex + 1} of {STANDARD_QUESTIONS.length}
+            </Text>
+          )}
         </View>
         {/* Reset button - top right */}
         {!showIntro && (
@@ -850,11 +856,19 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
           {/* Confirm button for multi-select */}
           {currentQuestion.type === 'multi' && (answers[currentQuestion.id]?.length > 0) && (
             <TouchableOpacity
-              style={styles.confirmButton}
               onPress={() => { haptic('impactMedium'); handleMultiConfirm(); }}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
+              style={styles.confirmButtonWrapper}
             >
-              <Text style={styles.confirmButtonText}>Continue →</Text>
+              <LinearGradient
+                colors={[theme.colors.purple, theme.colors.blue]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.confirmButtonGradient}
+              >
+                <Text style={styles.confirmButtonText}>Continue</Text>
+                <Feather name="arrow-right" size={16} color={theme.colors.black} />
+              </LinearGradient>
             </TouchableOpacity>
           )}
         </View>
@@ -870,18 +884,26 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
           />
           <View style={styles.advancedPromptButtons}>
             <TouchableOpacity
+              onPress={() => { haptic('impactMedium'); handleShowAdvanced(); }}
+              activeOpacity={0.8}
+              style={styles.addDataButtonWrapper}
+            >
+              <LinearGradient
+                colors={[theme.colors.purple, theme.colors.blue]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.addDataButtonGradient}
+              >
+                <Text style={styles.addDataButtonText}>Add data</Text>
+                <Feather name="plus" size={16} color={theme.colors.black} />
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.skipButton}
               onPress={() => { haptic('impactLight'); handleSkipAdvanced(); }}
               activeOpacity={0.8}
             >
-              <Text style={styles.skipButtonText}>Skip</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.showAdvancedButton}
-              onPress={() => { haptic('impactMedium'); handleShowAdvanced(); }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.showAdvancedButtonText}>Add data →</Text>
+              <Text style={styles.skipButtonText}>Skip for now</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1022,6 +1044,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.text,
   },
+  progressText: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    marginTop: 4,
+  },
 
   // Intro - matches Step 1 layout
   introText: {
@@ -1067,7 +1094,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   answeredBlock: {
-    marginBottom: 16,
+    marginBottom: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border + '40',
   },
   // AI bubble - matches AIOnboardingScreen exactly
   aiBubble: {
@@ -1354,33 +1384,46 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
   },
-  confirmButton: {
+  confirmButtonWrapper: {
+    marginTop: theme.spacing.md,
     alignSelf: 'flex-start',
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: theme.colors.purple,
-    borderRadius: theme.radius.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    marginTop: theme.spacing.sm,
+  },
+  confirmButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm + 2,
+    borderRadius: theme.radius.md,
   },
   confirmButtonText: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    fontWeight: '500',
+    fontSize: 15,
+    color: theme.colors.black,
+    fontWeight: '600',
   },
   advancedPromptButtons: {
+    flexDirection: 'column',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  addDataButtonWrapper: {
+    alignSelf: 'flex-start',
+  },
+  addDataButtonGradient: {
     flexDirection: 'row',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm + 2,
+    borderRadius: theme.radius.md,
+  },
+  addDataButtonText: {
+    fontSize: 15,
+    color: theme.colors.black,
+    fontWeight: '600',
   },
   skipButton: {
     alignSelf: 'flex-start',
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
   skipButtonText: {
