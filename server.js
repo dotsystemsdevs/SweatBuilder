@@ -687,39 +687,46 @@ Return ONLY JSON:
           });
         }
 
-        const prompt = `Analyze this person's current training situation. They want to: "${goal?.displayTitle || goal?.direction || goal?.raw || "get fit"}".
+        const prompt = `Analyze this person's current training situation. Goal: "${goal?.displayTitle || goal?.direction || goal?.raw || "get fit"}".
 
 Their description: "${description}"
 
-CRITICAL: Check if essential information is MISSING based on their goal:
-- For strength goals (bench X kg, squat, deadlift): Need current lift numbers
-- For running goals (5k, 10k, marathon): Need current running ability/distance
-- For weight goals: Need current weight or body composition info
-- For event goals: Need current fitness level for that sport
+TONE RULES (CRITICAL):
+- NEVER be judgmental or negative about their starting point
+- NEVER say "you can barely..." or "you're far from..."
+- Everyone starts somewhere - that's the whole point
+- Be neutral and factual, not motivational but not discouraging either
+- Focus on WHAT they do, not what they CAN'T do
 
-If critical info is missing, set needsMoreInfo = true and specify what's missing.
+SUMMARY RULES:
+- Write 1-2 SHORT sentences max
+- State facts neutrally: "You run occasionally" not "You can barely run"
+- Don't repeat their exact words back - interpret and summarize
+- Example good: "You're starting from zero running experience. That's a clear baseline."
+- Example bad: "You said you can barely run anything which means you have a long way to go"
 
-Extract and interpret:
-1. Current training frequency (how often they train)
-2. Experience level (beginner/intermediate/experienced)
-3. Relevant background for their goal
-4. Any limitations or concerns
-5. Key insights that will affect their plan
-6. What critical info is MISSING for this specific goal?
+DISPLAY_SUMMARY RULES:
+- 3-6 words ONLY
+- Neutral factual label
+- Examples: "Starting from scratch", "Occasional runner", "Gym 2x/week", "Returning after break"
 
-Be concise. Write in second person ("You train...", "You have...").
+MISSING INFO:
+- Only set needsMoreInfo=true if CRITICAL info is missing
+- missingInfo should be a SHORT direct question (max 10 words)
+- Example good: "What's the longest you can run today?"
+- Example bad: "I noticed you mentioned running but I'd like to know more about your current running ability - what's the longest distance you can comfortably run right now?"
 
 Return ONLY JSON:
 {
-  "summary": "2-3 sentence summary of their situation written TO them",
-  "displaySummary": "SHORT 5-10 word summary for display, e.g. 'Runs 2x/week, 5km max' or 'Gym 3x/week, intermediate' or 'Beginner, no current training'",
-  "level": 1-5 (1=complete beginner, 5=very experienced),
+  "summary": "1-2 sentence neutral summary",
+  "displaySummary": "3-6 word label",
+  "level": 1-5,
   "frequency": "none" | "occasional" | "1-2x/week" | "3-4x/week" | "5+/week",
   "experience": "beginner" | "some experience" | "intermediate" | "experienced",
-  "limitations": ["limitation1"] or [],
-  "insights": ["insight1", "insight2"] (things that will affect the plan),
+  "limitations": [],
+  "insights": [],
   "needsMoreInfo": true | false,
-  "missingInfo": "What specific info is needed, phrased as a question" or null
+  "missingInfo": "Short direct question or null"
 }`;
 
         const text = await callAI(SYSTEM_PROMPT_V2, prompt, 512);

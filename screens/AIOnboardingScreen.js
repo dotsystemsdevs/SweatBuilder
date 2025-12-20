@@ -897,14 +897,9 @@ export default function AIOnboardingScreen() {
               },
             }));
 
-            // Stay in CURRENT_STATE and ask for more info
+            // Stay in CURRENT_STATE and ask for more info - JUST the question, no summary
             setShowTextInput(true);
-
-            let followUpMsg = interpretation.summary || "";
-            if (followUpMsg) followUpMsg += "\n\n";
-            followUpMsg += interpretation.missingInfo;
-
-            addMessage(followUpMsg, true, "One more thing");
+            addMessage(interpretation.missingInfo, true, null);
             break;
           }
 
