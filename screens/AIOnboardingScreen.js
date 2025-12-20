@@ -9,6 +9,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -17,12 +18,18 @@ import { haptic } from "../utils/haptics";
 import DynamicSafeAreaView from "../components/DynamicSafeAreaView";
 import { useStatusBar } from "../hooks/useStatusBar";
 import {
-  interpretGoal,
-  generatePlan,
-  getSummary,
-  confirmPlan,
+  interpretGoalV2,
+  analyzeEvent,
   lookupEvent,
+  interpretCurrentState,
+  calculateGap,
+  generateStrategy,
+  generateMasterPlanV2,
+  summarizePlanV2,
 } from "../services/api";
+import { useOnboardingStore } from "../store/onboardingStore";
+import { STEPS, STEP_CONFIG, getNextStep, getProgress } from "./onboarding/steps";
+import { GOAL_TYPES, COACH_MODE } from "../types/onboardingContract";
 import theme from "../theme";
 
 // =============================================================================
@@ -81,39 +88,11 @@ const TypingIndicator = () => {
   );
 };
 
-// =============================================================================
-// STEPS - THE DEFINITIVE FLOW
-// =============================================================================
-
-const STEPS = {
-  // Start
-  WELCOME: "welcome",
-  INTRO: "intro",
-
-  // Goal type
-  GOAL_TYPE: "goal_type",
-
-  // Event path
-  EVENT_NAME: "event_name",
-  EVENT_CONFIRM: "event_confirm",
-  EVENT_DISTANCE: "event_distance",
-  EVENT_DATE: "event_date",
-
-  // Non-event path (optional target)
-  TARGET_GOAL: "target_goal",
-  TARGET_TYPE: "target_type",
-  TARGET_DETAILS: "target_details",
-
-  // Common steps
-  PLAN_LENGTH: "plan_length",
-  STARTING_POINT: "starting_point",
-  ADVANCED_SETTINGS: "advanced_settings",
-
-  // Generation
-  PLAN: "plan",
-  SUMMARY: "summary",
-  DONE: "done",
-};
+const ProgressBar = ({ progress }) => (
+  <View style={styles.progressContainer}>
+    <View style={[styles.progressBar, { width: `${progress}%` }]} />
+  </View>
+);
 
 // =============================================================================
 // MAIN COMPONENT
@@ -125,73 +104,37 @@ export default function AIOnboardingScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef(null);
 
+  // Store hooks
+  const {
+    onboardingData,
+    updateGoal,
+    updateIntent,
+    updateEvent,
+    updateConstraints,
+    updateBehaviorProfile,
+    updateGap,
+    setAmbition,
+    setGeneratedMasterPlan,
+    completeOnboarding,
+  } = useOnboardingStore();
+
   // State
-  const [step, setStep] = useState(STEPS.WELCOME);
+  const [step, setStep] = useState(STEPS.INTRO);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
   const [userData, setUserData] = useState({});
   const [typingMessageId, setTypingMessageId] = useState(null);
   const [showTextInput, setShowTextInput] = useState(false);
+  const [lockedGoal, setLockedGoal] = useState(null);
+  const [lockedCurrentState, setLockedCurrentState] = useState(null);
 
-  // Pending data
-  const [pendingEventData, setPendingEventData] = useState(null);
+  // Form fields for multi-field steps
+  const [formData, setFormData] = useState({});
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const continueButtonAnim = useRef(new Animated.Value(0)).current;
   const pillsAnim = useRef(new Animated.Value(0)).current;
-
-  // =============================================================================
-  // QUICK REPLY OPTIONS
-  // =============================================================================
-
-  const goalTypeReplies = [
-    { label: "A race or event 🏁", value: "event" },
-    { label: "Get stronger 💪", value: "strength" },
-    { label: "General fitness 🧘", value: "fitness" },
-    { label: "Something else ✏️", value: "other" },
-  ];
-
-  const eventConfirmReplies = [
-    { label: "Yes, use this ✅", value: "confirm" },
-    { label: "I'll enter it manually ✏️", value: "manual" },
-  ];
-
-  const targetGoalReplies = [
-    { label: "Yes, set a target 🎯", value: "yes" },
-    { label: "Skip — just get started ➡️", value: "skip" },
-  ];
-
-  const targetTypeReplies = [
-    { label: "Strength 💪", value: "strength" },
-    { label: "Endurance 🏃", value: "endurance" },
-    { label: "Consistency 📅", value: "consistency" },
-  ];
-
-  const planLengthReplies = [
-    { label: "4 weeks", value: "4" },
-    { label: "8 weeks", value: "8" },
-    { label: "12 weeks", value: "12" },
-    { label: "Let it adapt", value: "adaptive" },
-  ];
-
-  const startingPointReplies = [
-    { label: "Training regularly 💪", value: "regular" },
-    { label: "On and off 🔄", value: "on_off" },
-    { label: "Just getting back 🚀", value: "returning" },
-    { label: "Not training at all 😴", value: "not_training" },
-  ];
-
-  const advancedSettingsReplies = [
-    { label: "Yes, fine-tune it ⚙️", value: "yes" },
-    { label: "No, use defaults 👍", value: "no" },
-  ];
-
-  const summaryReplies = [
-    { label: "Looks good ✅", value: "confirm" },
-    { label: "I want changes ✏️", value: "change" },
-  ];
 
   // =============================================================================
   // EFFECTS
@@ -203,24 +146,26 @@ export default function AIOnboardingScreen() {
       duration: 400,
       useNativeDriver: true,
     }).start();
+
+    // Show intro message
+    addMessage(
+      "Tell me what you want to achieve. I'll build a plan that works for your life — not the other way around.",
+      true,
+      "Welcome to SweatBuilder"
+    );
   }, []);
+
+  // Debug: Log step changes
+  useEffect(() => {
+    console.log("[Onboarding] Step changed to:", step, "showTextInput:", showTextInput);
+  }, [step, showTextInput]);
 
   useEffect(() => {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages]);
 
   useEffect(() => {
-    if (step === STEPS.INTRO && !typingMessageId) {
-      Animated.timing(continueButtonAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [step, typingMessageId]);
-
-  useEffect(() => {
-    if (!typingMessageId && step !== STEPS.WELCOME && step !== STEPS.INTRO && step !== STEPS.DONE) {
+    if (!typingMessageId && step !== STEPS.DONE) {
       Animated.timing(pillsAnim, {
         toValue: 1,
         duration: 400,
@@ -251,236 +196,488 @@ export default function AIOnboardingScreen() {
     }, 400);
   };
 
+  const progress = getProgress(step, userData);
+
+  // =============================================================================
+  // QUICK REPLY OPTIONS
+  // =============================================================================
+
+  const eventAmbitionReplies = [
+    { label: "Just finish it", value: "COMPLETE" },
+    { label: "Achieve a specific result", value: "PERFORMANCE" },
+  ];
+
+  const ambitionReplies = [
+    { label: "Take it slow", value: "CAUTIOUS", description: "Prioritize consistency" },
+    { label: "Balanced approach", value: "BALANCED", description: "Recommended" },
+    { label: "Push me", value: "AMBITIOUS", description: "Higher intensity" },
+  ];
+
+  const planLengthReplies = [
+    { label: "4 weeks", value: 4 },
+    { label: "8 weeks (Recommended)", value: 8 },
+    { label: "12 weeks", value: 12 },
+    { label: "Rolling (no end date)", value: null },
+  ];
+
+  const strategyConfirmReplies = [
+    { label: "Looks good", value: "accept" },
+    { label: "I want to adjust", value: "adjust" },
+  ];
+
+  const goalConfirmReplies = [
+    { label: "Yes, confirm", value: "confirm" },
+    { label: "Edit", value: "change", secondary: true },
+  ];
+
+  const currentStateConfirmReplies = [
+    { label: "Yes, confirm", value: "confirm" },
+    { label: "Edit", value: "change", secondary: true },
+  ];
+
+  const summaryReplies = [
+    { label: "This looks good", value: "accept" },
+    { label: "I want to change something", value: "adjust" },
+  ];
+
+  const preferenceModeReplies = [
+    { label: "Explain why", value: "EXPLAIN_WHY", description: "Tell me the reasoning" },
+    { label: "Just tell me what to do", value: "JUST_TELL_ME", description: "Keep it short" },
+  ];
+
   // =============================================================================
   // STEP HANDLERS
   // =============================================================================
 
-  const handleStart = () => {
+  // Handle continue from INTRO
+  const handleIntroContinue = () => {
     haptic("impactLight");
-    setStep(STEPS.INTRO);
-    continueButtonAnim.setValue(0);
+    setStep(STEPS.GOAL_INPUT);
+    setShowTextInput(true);
     addMessage(
-      "I'm your training coach 🤝\n\nI'll help you build a realistic training plan — based on your goal, where you're starting from, and how much time you have.",
+      "What do you want to achieve?\n\nExamples: \"get stronger\", \"run a marathon\", \"feel better\"\n\nTraining for an event? Include the name and date.",
       true,
-      "Welcome"
+      "Step 1 — Goal"
     );
   };
 
-  const handleContinue = () => {
+  // Handle EVENT_AMBITION
+  const handleEventAmbition = async (value) => {
     haptic("impactLight");
-    addMessage("Let's do it", false);
-    goToStep(STEPS.GOAL_TYPE, "Pick the one that fits you best 👇", "What are you training for?");
-  };
+    const label = eventAmbitionReplies.find((r) => r.value === value)?.label || value;
+    addMessage(label, false);
 
-  // Goal Type
-  const handleGoalType = (value) => {
-    haptic("impactLight");
-    const selected = goalTypeReplies.find((r) => r.value === value);
-    addMessage(selected?.label || value, false);
-
-    if (value === "other") {
+    // If user wants to achieve a specific result, ask them to specify
+    if (value === "PERFORMANCE") {
+      setUserData((prev) => ({ ...prev, pendingAmbition: value }));
       setShowTextInput(true);
+      addMessage("What result are you aiming for?\n\nFor example: \"finish under 4 hours\", \"top 50%\"", true, "Your target");
       return;
     }
 
-    setUserData((prev) => ({ ...prev, goal_type: value }));
+    // For "Just finish it" - proceed directly
+    await finalizeEventAmbition(value, null);
+  };
 
-    if (value === "event") {
-      goToStep(STEPS.EVENT_NAME, "Type the name below and I'll look it up.", "Which event? 🏁");
-      setShowTextInput(true);
-    } else {
-      // Non-event: offer optional target
-      goToStep(
-        STEPS.TARGET_GOAL,
-        "If you want, we can lock the plan to a specific target.\nThis makes the progression much more precise.",
-        "Set a target?"
-      );
+  // Helper to finalize event ambition and go to GOAL_CONFIRM
+  const finalizeEventAmbition = async (ambitionValue, performanceTarget) => {
+    const label = eventAmbitionReplies.find((r) => r.value === ambitionValue)?.label || ambitionValue;
+
+    const eventData = {
+      ...userData.event,
+      ambition: ambitionValue,
+      ...(performanceTarget && { performanceTarget }),
+    };
+    setUserData((prev) => ({ ...prev, event: eventData, pendingAmbition: null }));
+    await updateEvent(eventData);
+
+    // Now go to GOAL_CONFIRM to lock in the goal
+    const event = userData.event || eventData;
+    let summary = event.name || userData.goal?.raw;
+    if (event.distance) summary += ` (${event.distance})`;
+    if (event.date) {
+      const dateStr = new Date(event.date).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      summary += `\n${dateStr}`;
+      if (event.daysUntil && event.daysUntil > 0) {
+        summary += ` — ${event.daysUntil} days away`;
+      }
     }
+    summary += `\nAmbition: ${performanceTarget || label}`;
+    summary += "\n\nIs this correct?";
+
+    setStep(STEPS.GOAL_CONFIRM);
+    addMessage(summary, true, "Confirm your goal");
   };
 
-  // Event Confirm
-  const handleEventConfirm = (value) => {
+  // Handle GOAL_CONFIRM
+  const handleGoalConfirm = async (value) => {
+    console.log("[Onboarding] GOAL_CONFIRM: User chose:", value);
     haptic("impactLight");
-    const selected = eventConfirmReplies.find((r) => r.value === value);
-    addMessage(selected?.label || value, false);
-
-    if (value === "confirm" && pendingEventData) {
-      setUserData((prev) => ({ ...prev, ...pendingEventData }));
-      setPendingEventData(null);
-      goToStep(STEPS.PLAN_LENGTH, "Pick what works for you 👇", "How long should the plan be?");
-    } else {
-      setPendingEventData(null);
-      setStep(STEPS.EVENT_DISTANCE);
-      setShowTextInput(true);
-      goToStep(STEPS.EVENT_DISTANCE, "What's the distance?", "Distance 🏃");
-    }
-  };
-
-  // Target Goal (optional)
-  const handleTargetGoal = (value) => {
-    haptic("impactLight");
-    const selected = targetGoalReplies.find((r) => r.value === value);
-    addMessage(selected?.label || value, false);
-
-    if (value === "yes") {
-      goToStep(STEPS.TARGET_TYPE, "What kind of target do you want?", "Target type");
-    } else {
-      // Skip target, go to plan length
-      setUserData((prev) => ({ ...prev, hasTarget: false }));
-      goToStep(STEPS.PLAN_LENGTH, "Pick what works for you 👇", "How long should the plan be?");
-    }
-  };
-
-  // Target Type
-  const handleTargetType = (value) => {
-    haptic("impactLight");
-    const selected = targetTypeReplies.find((r) => r.value === value);
-    addMessage(selected?.label || value, false);
-    setUserData((prev) => ({ ...prev, target_type: value, hasTarget: true }));
-
-    let prompt = "";
-    if (value === "strength") {
-      prompt = "What lift do you want to improve?\n\nExample: Bench 80 kg → 90 kg";
-    } else if (value === "endurance") {
-      prompt = "What does success look like?\n\nExample: 5 km in under 25 min";
-    } else {
-      prompt = "What would success look like for you?\n\nExample: Train 3x/week for 8 weeks";
-    }
-
-    setShowTextInput(true);
-    goToStep(STEPS.TARGET_DETAILS, prompt, "Your target 🎯");
-  };
-
-  // Plan Length
-  const handlePlanLength = (value) => {
-    haptic("impactLight");
-    const selected = planLengthReplies.find((r) => r.value === value);
-    addMessage(selected?.label || value, false);
-
-    const weeks = value === "adaptive" ? null : parseInt(value);
-    setUserData((prev) => ({ ...prev, plan_weeks: weeks, adaptive: value === "adaptive" }));
-
-    goToStep(STEPS.STARTING_POINT, "Pick the one that fits you best 👇", "Where are you starting from?");
-  };
-
-  // Starting Point
-  const handleStartingPoint = (value) => {
-    haptic("impactLight");
-    const selected = startingPointReplies.find((r) => r.value === value);
-    addMessage(selected?.label || value, false);
-    setUserData((prev) => ({ ...prev, starting_point: value }));
-
-    goToStep(
-      STEPS.ADVANCED_SETTINGS,
-      "Want to fine-tune things with numbers like FTP, paces, or lifting weights?",
-      "Advanced settings ⚙️"
-    );
-  };
-
-  // Advanced Settings
-  const handleAdvancedSettings = (value) => {
-    haptic("impactLight");
-    const selected = advancedSettingsReplies.find((r) => r.value === value);
-    addMessage(selected?.label || value, false);
-
-    if (value === "yes") {
-      setUserData((prev) => ({ ...prev, wantsAdvanced: true }));
-      // For now, skip advanced input and go to plan
-      // TODO: Add advanced input fields
-    }
-
-    // Generate plan
-    proceedToPlan();
-  };
-
-  // Summary
-  const handleSummary = (value) => {
-    haptic("impactLight");
-    const selected = summaryReplies.find((r) => r.value === value);
-    addMessage(selected?.label || value, false);
+    addMessage(value === "confirm" ? "Confirmed" : "Edit", false);
 
     if (value === "confirm") {
-      confirmPlan();
-      setStep(STEPS.DONE);
-      addMessage("Your plan is saved. Let's get to work!", true, "You're all set! ✅");
+      // Goal locked in - save AI's clean displayTitle for display
+      let goalDisplay = "";
+      if (userData.event?.name) {
+        goalDisplay = userData.event.name;
+        if (userData.event.performanceTarget) {
+          goalDisplay += ` — ${userData.event.performanceTarget}`;
+        } else if (userData.event.date) {
+          const dateStr = new Date(userData.event.date).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+          });
+          goalDisplay += ` — ${dateStr}`;
+        }
+      } else {
+        // Use AI's displayTitle (e.g., "Sub-5h Marathon") for clean display
+        goalDisplay = userData.goal?.displayTitle || userData.goal?.classification?.direction || userData.goal?.raw || "";
+      }
+      setLockedGoal(goalDisplay);
+
+      // Go to current state (free text)
+      console.log("[Onboarding] GOAL_CONFIRM: Goal confirmed, going to CURRENT_STATE");
+      goToCurrentState();
     } else {
-      addMessage("Tell me what you'd like to change.", true, "Adjustments");
+      // User wants to change - go back to goal input with current goal pre-filled
+      console.log("[Onboarding] GOAL_CONFIRM: User wants to change, going back to GOAL_INPUT");
+      setLockedGoal(null); // Clear locked goal
+      setStep(STEPS.GOAL_INPUT);
       setShowTextInput(true);
+      // Pre-fill with current goal so user can edit it
+      setInput(userData.goal?.raw || "");
+      addMessage("No problem — edit below.", true, null);
     }
   };
 
-  // =============================================================================
-  // PLAN GENERATION
-  // =============================================================================
+  // Handle CURRENT_STATE_CONFIRM
+  const handleCurrentStateConfirm = async (value) => {
+    console.log("[Onboarding] CURRENT_STATE_CONFIRM: User chose:", value);
+    haptic("impactLight");
+    addMessage(value === "confirm" ? "Confirmed" : "Edit", false);
 
-  const proceedToPlan = async () => {
-    const planData = {
-      goal_type: userData.goal_type || "fitness",
-      sport: userData.sport || "general",
-      target_type: userData.target_type,
-      target_details: userData.target_details,
-      plan_weeks: userData.plan_weeks || 8,
-      starting_point: userData.starting_point || "on_off",
-      event_name: userData.eventName,
-      weeks_until_event: userData.weeksToEvent,
-      days_per_week: 3, // Default, can be made configurable
+    if (value === "confirm") {
+      // Lock the current state for display - use AI's short displaySummary
+      const stateDisplay = userData.currentState?.displaySummary || userData.currentState?.summary || userData.currentState?.description || "";
+      setLockedCurrentState(stateDisplay);
+
+      // Current state confirmed - show coming soon
+      setStep(STEPS.DONE);
+      addMessage(
+        "Coming soon: Constraints, behavior profile, and your personalized training plan.",
+        true,
+        "That's it for now"
+      );
+    } else {
+      // User wants to change - go back to current state input
+      setStep(STEPS.CURRENT_STATE);
+      setShowTextInput(true);
+      setInput(userData.currentState?.description || "");
+      addMessage("No problem — edit below.", true, null);
+    }
+  };
+
+  // Helper to go to CURRENT_STATE with contextual question
+  const goToCurrentState = () => {
+    const goal = userData.goal?.raw || "";
+    const goalLower = goal.toLowerCase();
+
+    // Build a contextual question based on the goal - conversational, not bullet-heavy
+    let question = "Where are you starting from?\n\nTell me about your current training — what you do now, your experience, and anything I should know about.";
+
+    // Detect goal type and customize question
+    if (/marathon|half|10k|5k|run|löp|spring/i.test(goalLower)) {
+      question = "Tell me about your running.\n\nHow often do you run, what distances, and anything else that's relevant?";
+    } else if (/triathlon|ironman|swimrun/i.test(goalLower)) {
+      question = "Tell me about your tri-training.\n\nWhich discipline is your strongest? Any gaps I should know about?";
+    } else if (/swim|sim/i.test(goalLower)) {
+      question = "Tell me about your swimming.\n\nHow often, what distances, and how confident are you with technique?";
+    } else if (/cycl|bike|cykel/i.test(goalLower)) {
+      question = "Tell me about your cycling.\n\nIndoor or outdoor? Current distances and frequency?";
+    } else if (/strength|strong|styrka|lift|bench|squat|deadlift/i.test(goalLower)) {
+      question = "Tell me about your strength training.\n\nWhat do you do now? Current numbers if you know them.";
+    } else if (/muscle|hypertrophy|massa|bigger/i.test(goalLower)) {
+      question = "Tell me about your training.\n\nExperience with lifting? Current routine?";
+    } else if (/weight|lose|fat|gå ner|viktnedgång/i.test(goalLower)) {
+      question = "Tell me about your activity level.\n\nWhat do you do now? What exercises do you enjoy?";
+    } else if (/health|hälsa|feel better|må bättre|energy|energi/i.test(goalLower)) {
+      question = "Tell me about your situation.\n\nHow active are you now? What's worked before?";
+    } else if (/flex|mobility|stretch|rörlighet/i.test(goalLower)) {
+      question = "Tell me about your mobility.\n\nAny tight areas? Current stretching habits?";
+    }
+
+    setStep(STEPS.CURRENT_STATE);
+    setShowTextInput(true);
+    addMessage(question, true, "Step 2 — Current state");
+  };
+
+  // Handle AMBITION
+  const handleAmbition = async (value) => {
+    haptic("impactLight");
+    const item = ambitionReplies.find((r) => r.value === value);
+    addMessage(item?.label || value, false);
+
+    await setAmbition(value);
+    setUserData((prev) => ({ ...prev, ambition: value }));
+
+    // Go to current state with contextual question
+    goToCurrentState();
+  };
+
+  // Handle BEHAVIOR_PROFILE form
+  const handleBehaviorProfileSubmit = async () => {
+    haptic("impactLight");
+    const { irregularSchedule, energyVaries, perfectionism, stressLevel } = formData;
+
+    const profile = {
+      irregularSchedule: irregularSchedule || false,
+      energyNotMotivation: energyVaries || false,
+      perfectionism: perfectionism || false,
+      stressLevel: stressLevel || "MEDIUM",
     };
 
-    console.log("[Plan inputs]", planData);
+    addMessage("Got it", false);
+    setUserData((prev) => ({ ...prev, behaviorProfile: profile }));
+    await updateBehaviorProfile(profile);
 
-    setStep(STEPS.PLAN);
+    // Branch based on goal type
+    if (userData.goal?.type === GOAL_TYPES.EVENT || userData.isEvent) {
+      // Calculate gap and generate strategy
+      await generateEventStrategy();
+    } else {
+      setStep(STEPS.PLAN_LENGTH);
+      addMessage("How long should your plan be?\n\nRolling means we'll keep going — adjust as we learn what works for you.", true, "Plan duration");
+    }
+    setFormData({});
+  };
+
+  // Handle PLAN_LENGTH
+  const handlePlanLength = async (weeks) => {
+    haptic("impactLight");
+    const label = planLengthReplies.find((r) => r.value === weeks)?.label || `${weeks} weeks`;
+    addMessage(label, false);
+
+    setUserData((prev) => ({ ...prev, planWeeks: weeks }));
+    await generateNonEventStrategy(weeks);
+  };
+
+  // Generate strategy for EVENT goals
+  const generateEventStrategy = async () => {
     setLoading(true);
+    setStep(STEPS.EVENT_STRATEGY);
+    addMessage("Building your preparation strategy...", true, "Strategy");
 
     try {
-      const planRes = await generatePlan(planData);
+      // Calculate gap
+      const gapRes = await calculateGap({
+        goal: userData.goal,
+        currentState: userData.currentState,
+        event: userData.event,
+      });
 
-      if (planRes?.ok && planRes?.data) {
-        setUserData((prev) => ({ ...prev, plan: planRes.data }));
-        addMessage(formatPlan(planRes.data), true, "Your training plan 📋");
+      if (gapRes?.ok && gapRes?.data) {
+        await updateGap(gapRes.data);
+        setUserData((prev) => ({ ...prev, gap: gapRes.data }));
+      }
 
-        setStep(STEPS.SUMMARY);
-        const summaryRes = await getSummary(planRes.data);
-        if (summaryRes?.ok && summaryRes?.data?.summary) {
-          addMessage(summaryRes.data.summary, true, "Summary");
+      // Generate strategy
+      const strategyRes = await generateStrategy({
+        goalType: GOAL_TYPES.EVENT,
+        gap: gapRes?.data,
+        constraints: userData.constraints,
+        event: userData.event,
+        ambition: userData.ambition || "BALANCED",
+      });
+
+      if (strategyRes?.ok && strategyRes?.data) {
+        setUserData((prev) => ({ ...prev, strategy: strategyRes.data }));
+
+        let msg = `${strategyRes.data.totalWeeks} weeks - ${strategyRes.data.strategyType}\n\n`;
+        strategyRes.data.phases?.forEach((p) => {
+          msg += `${p.name}: Week ${p.weeks[0]}-${p.weeks[p.weeks.length - 1]} - ${p.focus}\n`;
+        });
+        if (strategyRes.data.explanation) {
+          msg += `\n${strategyRes.data.explanation}`;
         }
-      } else {
-        addMessage("Could not generate plan. Let's try again.", true);
+
+        addMessage(msg, true, "Your preparation plan");
       }
     } catch (err) {
-      addMessage("Something went wrong. Try again.", true);
+      console.error(err);
+      addMessage("I've created a standard preparation strategy.", true);
+      setUserData((prev) => ({
+        ...prev,
+        strategy: { strategyType: "BASE_BUILD_PEAK_TAPER", totalWeeks: 12 },
+      }));
     } finally {
       setLoading(false);
     }
   };
 
-  const formatPlan = (data) => {
-    if (!data) return "Could not create plan.";
-    if (typeof data === "string") return data;
+  // Generate strategy for NON-EVENT goals
+  const generateNonEventStrategy = async (weeks) => {
+    setLoading(true);
+    setStep(STEPS.NON_EVENT_STRATEGY);
+    addMessage("Building your training strategy...", true, "Strategy");
 
-    const plan = data.plan || data;
-    let text = "";
-
-    if (plan.schedule && Array.isArray(plan.schedule)) {
-      text += "Weekly schedule:\n";
-      plan.schedule.slice(0, 1).forEach((week) => {
-        if (week.days) {
-          week.days.forEach((day) => {
-            if (day.type === "training") {
-              text += `• ${day.day}: ${day.description}\n`;
-            }
-          });
-        }
+    try {
+      const gapRes = await calculateGap({
+        goal: userData.goal,
+        currentState: userData.currentState,
       });
-    }
 
-    if (data.explanation) {
-      text += `\n${data.explanation}`;
-    }
-    if (plan.weeks) {
-      text += `\n\n${plan.weeks} weeks, ${plan.days_per_week || 3} days/week`;
-    }
+      if (gapRes?.ok && gapRes?.data) {
+        await updateGap(gapRes.data);
+        setUserData((prev) => ({ ...prev, gap: gapRes.data }));
+      }
 
-    return text || "Plan created.";
+      const strategyRes = await generateStrategy({
+        goalType: GOAL_TYPES.NON_EVENT,
+        gap: gapRes?.data,
+        constraints: userData.constraints,
+        ambition: userData.ambition || "BALANCED",
+      });
+
+      if (strategyRes?.ok && strategyRes?.data) {
+        const strategy = { ...strategyRes.data, totalWeeks: weeks || strategyRes.data.totalWeeks };
+        setUserData((prev) => ({ ...prev, strategy }));
+
+        let msg = `${strategy.totalWeeks || "Rolling"} weeks - ${strategy.strategyType}\n\n`;
+        strategy.phases?.forEach((p) => {
+          msg += `${p.name}: ${p.focus}\n`;
+        });
+        if (strategy.explanation) {
+          msg += `\n${strategy.explanation}`;
+        }
+
+        addMessage(msg, true, "Your training structure");
+      }
+    } catch (err) {
+      console.error(err);
+      addMessage("I've created a standard training structure.", true);
+      setUserData((prev) => ({
+        ...prev,
+        strategy: { strategyType: "SAFE_BUILD_MAINTAIN_TEST", totalWeeks: weeks || 8 },
+      }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle strategy confirmation
+  const handleStrategyConfirm = async (value) => {
+    haptic("impactLight");
+    addMessage(value === "accept" ? "Looks good" : "I want to adjust", false);
+
+    if (value === "accept") {
+      await generateFullPlan();
+    } else {
+      setShowTextInput(true);
+      addMessage("What would you like to change?\n\nTell me and I'll adjust.", true, "Adjustments");
+    }
+  };
+
+  // Generate full master plan
+  const generateFullPlan = async () => {
+    setLoading(true);
+    setStep(STEPS.GENERATING_PLAN);
+    addMessage("Creating your personalized training plan...", true, "Building plan");
+
+    try {
+      const planRes = await generateMasterPlanV2({
+        goal: userData.goal,
+        intent: { primary: userData.goal?.intent || "LIVSSTIL" },
+        gap: userData.gap,
+        event: userData.event,
+        constraints: {
+          ...userData.constraints,
+          sessionsPerWeek: userData.currentState?.sessionsPerWeek || 3,
+          timePerSession: userData.currentState?.timePerSession || 45,
+        },
+        behaviorProfile: userData.behaviorProfile,
+        strategy: userData.strategy,
+        ambition: userData.ambition,
+      });
+
+      if (planRes?.ok && planRes?.data) {
+        await setGeneratedMasterPlan(planRes.data);
+        setUserData((prev) => ({ ...prev, masterPlan: planRes.data }));
+
+        // Get summary
+        const summaryRes = await summarizePlanV2({
+          goal: userData.goal,
+          intent: { primary: userData.goal?.intent },
+          masterPlan: planRes.data.masterPlan,
+          constraints: userData.constraints,
+          gap: userData.gap,
+          event: userData.event,
+        });
+
+        setStep(STEPS.PLAN_SUMMARY);
+        if (summaryRes?.ok && summaryRes?.data?.summary) {
+          addMessage(summaryRes.data.summary, true, "Your plan");
+          if (summaryRes.data.safetyNets?.length) {
+            setTimeout(() => {
+              addMessage(`Safety nets: ${summaryRes.data.safetyNets.join(", ")}`, true);
+            }, 800);
+          }
+        } else {
+          addMessage("Your plan is ready.\n\nEvery workout has 3 versions:\n• Normal — full workout\n• Light — lower intensity\n• Short — time-crunched version", true, "Your plan");
+        }
+      } else {
+        throw new Error("Plan generation failed");
+      }
+    } catch (err) {
+      console.error(err);
+      addMessage("Couldn't generate the full plan — let me try a simpler version.", true);
+      setStep(STEPS.PLAN_SUMMARY);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle summary confirmation
+  const handleSummaryConfirm = (value) => {
+    haptic("impactLight");
+    addMessage(value === "accept" ? "This looks good" : "I want to change something", false);
+
+    if (value === "accept") {
+      setStep(STEPS.PREFERENCE_MODE);
+      addMessage("One last thing.\n\nHow do you prefer I communicate with you?", true, "Communication style");
+    } else {
+      setShowTextInput(true);
+      addMessage("What would you like to change?\n\nTell me and I'll adjust.", true, "Adjustments");
+    }
+  };
+
+  // Handle preference mode
+  const handlePreferenceMode = async (value) => {
+    haptic("impactLight");
+    const label = preferenceModeReplies.find((r) => r.value === value)?.label || value;
+    addMessage(label, false);
+
+    await updateBehaviorProfile({ preferredMode: value });
+    finishOnboarding();
+  };
+
+  // Finish onboarding
+  const finishOnboarding = async () => {
+    setStep(STEPS.DONE);
+    addMessage(
+      "You're all set.\n\nRemember — this is just a starting point. We'll adjust as we go.\n\nYour 3 workout versions:\n• Normal — full workout as designed\n• Light — lower intensity for tough days\n• Short — core exercises only\n\nUse whichever fits your day.",
+      true,
+      "All set"
+    );
+
+    await completeOnboarding({
+      goal: userData.goal?.raw,
+      daysPerWeek: userData.currentState?.sessionsPerWeek || 3,
+      sessionDuration: userData.currentState?.timePerSession || 45,
+    });
   };
 
   // =============================================================================
@@ -491,6 +688,8 @@ export default function AIOnboardingScreen() {
     const text = input.trim();
     if (!text || loading) return;
 
+    console.log("[Onboarding] handleSubmit called. Current step:", step, "Input:", text);
+
     haptic("impactLight");
     addMessage(text, false);
     setInput("");
@@ -498,89 +697,274 @@ export default function AIOnboardingScreen() {
     setLoading(true);
 
     try {
+      // Global intent detection - check if user wants to change their goal from anywhere
+      // Be specific to avoid false positives - require explicit phrases
+      const changeGoalPhrases = /\b(change\s*(my\s*)?(goal|mål)|ändra\s*(mitt\s*)?(mål|goal)|nytt\s*mål|different\s*goal|go\s*back\s*to\s*(goal|start)|börja\s*om)\b/i;
+      const wantsToChangeGoal = changeGoalPhrases.test(text);
+
+      if (wantsToChangeGoal && step !== STEPS.GOAL_INPUT && step !== STEPS.INTRO) {
+        console.log("[Onboarding] User wants to change goal, navigating back");
+        setStep(STEPS.GOAL_INPUT);
+        setShowTextInput(true);
+        setInput(userData.goal?.raw || "");
+        addMessage("No problem — edit your goal below.", true, "Change goal");
+        setLoading(false);
+        return; // Exit early, don't process the step
+      }
+
       switch (step) {
-        case STEPS.GOAL_TYPE: {
-          // Free text goal
-          const res = await interpretGoal(text);
-          if (res?.ok && res?.data) {
-            setUserData((prev) => ({ ...prev, goal: text, ...res.data }));
-            if (res.data.needs_followup) {
-              setStep(STEPS.EVENT_NAME);
-              setShowTextInput(true);
-              addMessage("Type the name below and I'll look it up.", true, "Which event? 🏁");
-            } else {
-              goToStep(STEPS.TARGET_GOAL, "If you want, we can lock the plan to a specific target.", "Set a target?");
+        case STEPS.GOAL_INPUT: {
+          console.log("[Onboarding] GOAL_INPUT: Processing goal:", text);
+          // Check if goal mentions event-like keywords - be aggressive about detection
+          const eventKeywords = /\b(marathon|half.?marathon|10k|5k|21k|42k|triathlon|ironman|race|lopp|loppet|tävling|tävla|sprint|ultra|relay|stafett|swim|swimrun|bike|cykel|sim|mila|km|kilometer|vasalopp|lidingö|göteborgs|stockholm|berlin|london|new york|boston|chicago|midnattsloppet|blodomloppet|tjejmilen|vårruset|kungsholmen|classic|challenge|ötillö|tough|mudder|obstacle|hinderbana|crossfit|games|competition|match|cup|mästerskap|championship)\b/i;
+          const looksLikeEvent = eventKeywords.test(text);
+
+          // Try to interpret with AI first
+          let goalData = { raw: text, type: GOAL_TYPES.NON_EVENT };
+          let aiDisplayTitle = text; // Default to user's text
+
+          try {
+            const res = await interpretGoalV2(text);
+            if (res?.ok && res?.data) {
+              const { type, level, intent, direction, displayTitle, confidence } = res.data;
+
+              goalData = {
+                raw: text,
+                type: type || (looksLikeEvent ? GOAL_TYPES.EVENT : GOAL_TYPES.NON_EVENT),
+                level,
+                displayTitle: displayTitle || direction || text,
+                classification: {
+                  intent,
+                  direction,
+                  risk: res.data.risk || [],
+                },
+                confidence,
+              };
+
+              // Use AI's displayTitle for confirmation (e.g., "Sub-5h Marathon")
+              if (displayTitle && displayTitle.length > 1) {
+                aiDisplayTitle = displayTitle;
+              } else if (direction && direction.length > 3) {
+                aiDisplayTitle = direction;
+              }
+
+              console.log("[Onboarding] AI interpretation:", { confidence, displayTitle, direction });
             }
+          } catch (apiError) {
+            console.log("[Onboarding] API failed, using user text directly");
           }
-          break;
-        }
 
-        case STEPS.EVENT_NAME: {
-          const eventRes = await lookupEvent(text);
+          // If API didn't return type but goal looks like an event, set it
+          if (!goalData.type && looksLikeEvent) {
+            goalData.type = GOAL_TYPES.EVENT;
+          }
 
-          if (eventRes?.ok && eventRes?.data?.found) {
-            const { eventName, eventDate, location, distance, sport } = eventRes.data;
-            const dateObj = new Date(eventDate);
-            const today = new Date();
-            const weeksToEvent = Math.ceil((dateObj - today) / (1000 * 60 * 60 * 24 * 7));
-
-            setPendingEventData({ eventName, eventDate, weeksToEvent, sport, distance });
-
-            const formattedDate = dateObj.toLocaleDateString('en-US', {
-              month: 'long', day: 'numeric', year: 'numeric'
-            });
-
-            let msg = `${eventName}`;
-            if (distance) msg += `\n${distance}`;
-            msg += ` · ${formattedDate}`;
-            if (location) msg += ` · ${location}`;
-            msg += `\n\nDoes this look right?`;
-
-            setStep(STEPS.EVENT_CONFIRM);
-            addMessage(msg, true, "I found this event 🔍");
-          } else {
-            setUserData((prev) => ({ ...prev, eventName: text }));
-            setStep(STEPS.EVENT_DISTANCE);
+          // Only ask for clarification if text is too short (less than 3 chars)
+          // Trust the user - they know what they want
+          if (text.length < 3) {
+            console.log("[Onboarding] Goal too short, asking for more");
             setShowTextInput(true);
             addMessage(
-              "I couldn't confidently identify this event.\n\nThat's totally fine — let's fill in the details manually.",
+              "🤔 Can you tell me a bit more about what you want to achieve?",
               true,
-              "No worries 👍"
+              "Tell me more"
             );
-            setTimeout(() => addMessage("What's the distance?", true, "Distance 🏃"), 800);
+            break;
+          }
+
+          // Clear old event data if this is a non-event goal (user might have changed from event to non-event)
+          if (!looksLikeEvent && goalData.type !== GOAL_TYPES.EVENT) {
+            setUserData((prev) => ({ ...prev, goal: goalData, event: null, isEvent: false }));
+          } else {
+            setUserData((prev) => ({ ...prev, goal: goalData }));
+          }
+          await updateGoal(goalData);
+
+          // If it looks like an event, search for details
+          if (goalData.type === GOAL_TYPES.EVENT || looksLikeEvent) {
+            let eventData = { name: text, type: "other" };
+            let eventFound = false;
+
+            try {
+              const lookupRes = await lookupEvent(text);
+              if (lookupRes?.ok && lookupRes?.data?.found) {
+                const { eventDate, distance, sport, location, eventName } = lookupRes.data;
+                const dateObj = eventDate ? new Date(eventDate) : null;
+                const daysUntil = dateObj ? Math.ceil((dateObj - new Date()) / (1000 * 60 * 60 * 24)) : null;
+
+                eventData = {
+                  name: eventName || text,
+                  type: sport || "running",
+                  date: eventDate,
+                  daysUntil,
+                  distance,
+                  location,
+                };
+                eventFound = true;
+              }
+            } catch (e) {
+              // Search failed, continue with basic info
+              console.log("[Onboarding] Event lookup failed:", e);
+            }
+
+            setUserData((prev) => ({ ...prev, event: eventData, isEvent: true }));
+            await updateEvent(eventData);
+
+            // Build event summary for confirmation
+            let summary = eventData.name;
+            if (eventData.distance) summary += ` (${eventData.distance})`;
+            if (eventData.date) {
+              const dateStr = new Date(eventData.date).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              });
+              summary += `\n${dateStr}`;
+              if (eventData.daysUntil && eventData.daysUntil > 0) {
+                summary += ` - ${eventData.daysUntil} days away`;
+              }
+            }
+            if (!eventFound) {
+              summary += "\n\n(I couldn't find the date — edit to add it, e.g. \"Stockholm Marathon June 2025\")";
+            }
+
+            summary += "\n\nWhat's your ambition for this?";
+
+            // Go to EVENT_AMBITION first, then GOAL_CONFIRM
+            console.log("[Onboarding] GOAL_INPUT: Event detected, going to EVENT_AMBITION");
+            setStep(STEPS.EVENT_AMBITION);
+            addMessage(summary, true, "Your event");
+          } else {
+            // Non-event: show AI's clean displayTitle for confirmation
+            console.log("[Onboarding] GOAL_INPUT: Non-event, going to GOAL_CONFIRM");
+
+            // Use AI's displayTitle (e.g., "Sub-5h Marathon" instead of verbose user input)
+            const displayGoal = aiDisplayTitle || text;
+
+            setStep(STEPS.GOAL_CONFIRM);
+            addMessage(`${displayGoal}\n\nIs this correct?`, true, "Confirm your goal");
           }
           break;
         }
 
-        case STEPS.EVENT_DISTANCE: {
-          setUserData((prev) => ({ ...prev, distance: text }));
-          setStep(STEPS.EVENT_DATE);
-          setShowTextInput(true);
-          addMessage("When is the event?", true, "Date 📅");
+        // GOAL_DETAILS and EVENT_INFO are no longer used - flow goes directly to GOAL_CONFIRM
+        case STEPS.GOAL_DETAILS:
+        case STEPS.EVENT_INFO: {
+          console.log("[Onboarding] Deprecated step reached, redirecting to GOAL_CONFIRM");
+          setStep(STEPS.GOAL_CONFIRM);
           break;
         }
 
-        case STEPS.EVENT_DATE: {
-          const dateObj = new Date(text);
-          if (!isNaN(dateObj.getTime())) {
-            const today = new Date();
-            const weeksToEvent = Math.ceil((dateObj - today) / (1000 * 60 * 60 * 24 * 7));
-            setUserData((prev) => ({ ...prev, eventDate: text, weeksToEvent }));
+        // Handle performance target input for EVENT_AMBITION
+        case STEPS.EVENT_AMBITION: {
+          console.log("[Onboarding] EVENT_AMBITION: Processing performance target:", text);
+          if (userData.pendingAmbition === "PERFORMANCE") {
+            await finalizeEventAmbition("PERFORMANCE", text);
           }
-          goToStep(STEPS.PLAN_LENGTH, "Pick what works for you 👇", "How long should the plan be?");
           break;
         }
 
-        case STEPS.TARGET_DETAILS: {
-          setUserData((prev) => ({ ...prev, target_details: text }));
-          goToStep(STEPS.PLAN_LENGTH, "Pick what works for you 👇", "How long should the plan be?");
+        case STEPS.CURRENT_STATE: {
+          console.log("[Onboarding] CURRENT_STATE: Processing current state:", text);
+
+          // Build full description (combine with previous if user is adding more info)
+          const previousDescription = userData.currentState?.description || "";
+          const fullDescription = previousDescription ? `${previousDescription}\n${text}` : text;
+
+          // Call AI to interpret the current state
+          let interpretation = null;
+          try {
+            const res = await interpretCurrentState(fullDescription, userData.goal);
+            if (res?.ok && res?.data) {
+              interpretation = res.data;
+              console.log("[Onboarding] AI interpretation:", interpretation);
+            }
+          } catch (err) {
+            console.log("[Onboarding] Current state interpretation failed:", err);
+          }
+
+          // Check if AI needs more information
+          if (interpretation?.needsMoreInfo && interpretation?.missingInfo) {
+            // AI says info is insufficient - ask follow-up question
+            console.log("[Onboarding] AI needs more info:", interpretation.missingInfo);
+
+            // Store cumulative current state
+            setUserData((prev) => ({
+              ...prev,
+              currentState: {
+                ...prev.currentState,
+                description: fullDescription,
+              },
+            }));
+
+            // Stay in CURRENT_STATE and ask for more info
+            setShowTextInput(true);
+
+            let followUpMsg = interpretation.summary || "";
+            if (followUpMsg) followUpMsg += "\n\n";
+            followUpMsg += interpretation.missingInfo;
+
+            addMessage(followUpMsg, true, "One more thing");
+            break;
+          }
+
+          // AI has enough info - store and go to confirm
+          const currentState = {
+            description: fullDescription,
+            ...(interpretation && {
+              summary: interpretation.summary,
+              displaySummary: interpretation.displaySummary,
+              level: interpretation.level,
+              frequency: interpretation.frequency,
+              experience: interpretation.experience,
+              limitations: interpretation.limitations,
+              insights: interpretation.insights,
+            }),
+          };
+
+          setUserData((prev) => ({ ...prev, currentState }));
+
+          // Go to CURRENT_STATE_CONFIRM - show AI's interpretation
+          setStep(STEPS.CURRENT_STATE_CONFIRM);
+
+          // Build the confirmation message with AI's interpretation
+          const summary = interpretation?.summary || text;
+          let confirmMsg = summary;
+
+          if (interpretation?.insights?.length > 0) {
+            confirmMsg += `\n\n${interpretation.insights.join("\n")}`;
+          }
+
+          confirmMsg += "\n\nIs this correct?";
+
+          addMessage(confirmMsg, true, "Confirm your starting point");
           break;
         }
 
-        case STEPS.SUMMARY: {
-          // User wants changes
-          addMessage("Let me adjust the plan for you.", true, "Adjusting...");
-          // TODO: Implement plan adjustment
+        case STEPS.CONSTRAINTS: {
+          console.log("[Onboarding] CONSTRAINTS: Processing constraints:", text);
+
+          // Parse common patterns from free text
+          const sessionsMatch = text.match(/(\d+)\s*(x|times?|gånger?|ggr)/i);
+          const timeMatch = text.match(/(\d+)\s*(min|minutes?|minuter)/i);
+
+          const constraints = {
+            description: text,
+            sessionsPerWeek: sessionsMatch ? parseInt(sessionsMatch[1], 10) : null,
+            timePerSession: timeMatch ? parseInt(timeMatch[1], 10) : null,
+          };
+
+          setUserData((prev) => ({
+            ...prev,
+            constraints: { ...prev.constraints, ...constraints },
+          }));
+
+          await updateConstraints(constraints);
+
+          // Go to BEHAVIOR_PROFILE
+          setStep(STEPS.BEHAVIOR_PROFILE);
+          setFormData({});
+          addMessage("A few quick questions.\n\nThis helps me adapt the plan to how you actually work.", true, "About you");
           break;
         }
 
@@ -588,67 +972,82 @@ export default function AIOnboardingScreen() {
           break;
       }
     } catch (err) {
-      addMessage("Something went wrong. Try again.", true);
+      console.error("[Onboarding] Error:", err);
+      addMessage("Something went wrong. Let's try again.", true);
+      setShowTextInput(true);
     } finally {
       setLoading(false);
     }
   };
 
   // =============================================================================
-  // RENDER
+  // RENDER HELPERS
   // =============================================================================
 
   const getCurrentReplies = () => {
     switch (step) {
-      case STEPS.GOAL_TYPE: return showTextInput ? null : goalTypeReplies;
-      case STEPS.EVENT_CONFIRM: return eventConfirmReplies;
-      case STEPS.TARGET_GOAL: return targetGoalReplies;
-      case STEPS.TARGET_TYPE: return targetTypeReplies;
-      case STEPS.PLAN_LENGTH: return planLengthReplies;
-      case STEPS.STARTING_POINT: return startingPointReplies;
-      case STEPS.ADVANCED_SETTINGS: return advancedSettingsReplies;
-      case STEPS.SUMMARY: return summaryReplies;
-      default: return null;
+      case STEPS.GOAL_CONFIRM:
+        return goalConfirmReplies;
+      case STEPS.CURRENT_STATE_CONFIRM:
+        return currentStateConfirmReplies;
+      case STEPS.EVENT_AMBITION:
+        // Don't show quick replies if waiting for performance target input
+        if (userData.pendingAmbition) return null;
+        return eventAmbitionReplies;
+      case STEPS.AMBITION:
+        return ambitionReplies;
+      case STEPS.PLAN_LENGTH:
+        return planLengthReplies;
+      case STEPS.EVENT_STRATEGY:
+      case STEPS.NON_EVENT_STRATEGY:
+        return strategyConfirmReplies;
+      case STEPS.PLAN_SUMMARY:
+        return summaryReplies;
+      case STEPS.PREFERENCE_MODE:
+        return preferenceModeReplies;
+      default:
+        return null;
     }
   };
 
   const getCurrentHandler = () => {
     switch (step) {
-      case STEPS.GOAL_TYPE: return handleGoalType;
-      case STEPS.EVENT_CONFIRM: return handleEventConfirm;
-      case STEPS.TARGET_GOAL: return handleTargetGoal;
-      case STEPS.TARGET_TYPE: return handleTargetType;
-      case STEPS.PLAN_LENGTH: return handlePlanLength;
-      case STEPS.STARTING_POINT: return handleStartingPoint;
-      case STEPS.ADVANCED_SETTINGS: return handleAdvancedSettings;
-      case STEPS.SUMMARY: return handleSummary;
-      default: return () => {};
+      case STEPS.GOAL_CONFIRM:
+        return handleGoalConfirm;
+      case STEPS.CURRENT_STATE_CONFIRM:
+        return handleCurrentStateConfirm;
+      case STEPS.EVENT_AMBITION:
+        return handleEventAmbition;
+      case STEPS.AMBITION:
+        return handleAmbition;
+      case STEPS.PLAN_LENGTH:
+        return handlePlanLength;
+      case STEPS.EVENT_STRATEGY:
+      case STEPS.NON_EVENT_STRATEGY:
+        return handleStrategyConfirm;
+      case STEPS.PLAN_SUMMARY:
+        return handleSummaryConfirm;
+      case STEPS.PREFERENCE_MODE:
+        return handlePreferenceMode;
+      default:
+        return () => {};
     }
   };
 
-  const getPlaceholder = () => {
-    switch (step) {
-      case STEPS.GOAL_TYPE: return "Describe your goal...";
-      case STEPS.EVENT_NAME: return "🏁 Event name...";
-      case STEPS.EVENT_DISTANCE: return "🏃 e.g. 10 km, Half marathon...";
-      case STEPS.EVENT_DATE: return "📅 e.g. June 15, 2025";
-      case STEPS.TARGET_DETAILS: {
-        // Dynamic placeholder based on target type
-        if (userData.target_type === "strength") {
-          return "💪 e.g. Bench 80 kg → 90 kg";
-        } else if (userData.target_type === "endurance") {
-          return "🏃 e.g. 5 km in under 25 min";
-        } else {
-          return "📅 e.g. Train 3x/week for 8 weeks";
-        }
-      }
-      default: return "Type here...";
-    }
-  };
-
+  const showFormStep = [STEPS.BEHAVIOR_PROFILE].includes(step);
+  const showInput = showTextInput && (
+    [STEPS.GOAL_INPUT, STEPS.CURRENT_STATE, STEPS.CONSTRAINTS].includes(step) ||
+    (step === STEPS.EVENT_AMBITION && userData.pendingAmbition)
+  );
   const currentReplies = getCurrentReplies();
   const currentHandler = getCurrentHandler();
-  const showInput = showTextInput && [STEPS.GOAL_TYPE, STEPS.EVENT_NAME, STEPS.EVENT_DISTANCE, STEPS.EVENT_DATE, STEPS.TARGET_DETAILS, STEPS.SUMMARY].includes(step);
+
+  // Debug render state
+  console.log("[Onboarding] Render - step:", step, "showInput:", showInput, "showTextInput:", showTextInput, "currentReplies:", currentReplies ? "yes" : "no");
+
+  // =============================================================================
+  // RENDER
+  // =============================================================================
 
   return (
     <DynamicSafeAreaView style={styles.screen}>
@@ -659,9 +1058,36 @@ export default function AIOnboardingScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={{ width: 40 }} />
-          <Text style={styles.headerTitle}>🤖</Text>
+          <Text style={styles.headerTitle}>SweatBuilder</Text>
           <View style={{ width: 40 }} />
         </View>
+
+        {/* Progress */}
+        <ProgressBar progress={progress} />
+
+        {/* Locked Steps Display */}
+        {(lockedGoal || lockedCurrentState) && (
+          <View style={styles.lockedContainer}>
+            {lockedGoal && (
+              <View style={styles.lockedItem}>
+                <Text style={styles.lockedNumber}>1</Text>
+                <View style={styles.lockedContent}>
+                  <Text style={styles.lockedLabel}>Goal</Text>
+                  <Text style={styles.lockedText} numberOfLines={2}>{lockedGoal}</Text>
+                </View>
+              </View>
+            )}
+            {lockedCurrentState && (
+              <View style={styles.lockedItem}>
+                <Text style={styles.lockedNumber}>2</Text>
+                <View style={styles.lockedContent}>
+                  <Text style={styles.lockedLabel}>Current state</Text>
+                  <Text style={styles.lockedText} numberOfLines={3}>{lockedCurrentState}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Messages */}
         <ScrollView
@@ -670,50 +1096,42 @@ export default function AIOnboardingScreen() {
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
         >
-          {step === STEPS.WELCOME && (
-            <Animated.View style={[styles.welcomeContainer, { opacity: fadeAnim }]}>
-              <Text style={styles.welcomeEmoji}>👋</Text>
-              <Text style={styles.welcomeTitle}>Welcome</Text>
-              <Text style={styles.welcomeSubtitle}>
-                Let me help you create a personal training plan
-              </Text>
-              <TouchableOpacity style={styles.startButton} onPress={handleStart}>
-                <Text style={styles.startButtonText}>Start planning</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-
-          {messages.map((msg) => (
-            <View
-              key={msg.id}
-              style={[
-                styles.messageBubble,
-                msg.isAI ? styles.aiBubble : styles.userBubble,
-              ]}
-            >
-              {msg.isAI && msg.title && (
-                <Text style={styles.aiTitle}>{msg.title}</Text>
-              )}
-              {msg.isAI && msg.id === typingMessageId ? (
-                <TypewriterText
-                  text={msg.text}
-                  style={[styles.messageText, styles.aiText]}
-                  speed={15}
-                  onComplete={() => {
-                    setTypingMessageId(null);
-                    scrollRef.current?.scrollToEnd({ animated: true });
-                  }}
-                />
-              ) : (
-                <Text style={[styles.messageText, msg.isAI ? styles.aiText : styles.userText]}>
-                  {msg.text}
-                </Text>
+          {messages.map((msg, index) => (
+            <View key={msg.id}>
+              <View
+                style={[
+                  styles.messageBubble,
+                  msg.isAI ? styles.aiBubble : styles.userBubble,
+                ]}
+              >
+                {msg.isAI && msg.title && (
+                  <Text style={styles.aiTitle}>{msg.title}</Text>
+                )}
+                {msg.isAI && msg.id === typingMessageId ? (
+                  <TypewriterText
+                    text={msg.text}
+                    style={[styles.messageText, styles.aiText]}
+                    speed={15}
+                    onComplete={() => {
+                      setTypingMessageId(null);
+                      scrollRef.current?.scrollToEnd({ animated: true });
+                    }}
+                  />
+                ) : (
+                  <Text style={[styles.messageText, msg.isAI ? styles.aiText : styles.userText]}>
+                    {msg.text}
+                  </Text>
+                )}
+              </View>
+              {/* Divider after Welcome message */}
+              {msg.title?.includes("Welcome") && messages[index + 1] && (
+                <View style={styles.divider} />
               )}
             </View>
           ))}
 
           {/* Quick reply pills */}
-          {!typingMessageId && !loading && currentReplies && (
+          {!typingMessageId && !loading && currentReplies && !showFormStep && (
             <Animated.View
               style={[
                 styles.inlinePillsContainer,
@@ -723,22 +1141,96 @@ export default function AIOnboardingScreen() {
                     translateY: pillsAnim.interpolate({
                       inputRange: [0, 1],
                       outputRange: [10, 0],
-                    })
+                    }),
                   }],
-                }
+                },
               ]}
             >
               {currentReplies.map((item) => (
                 <TouchableOpacity
-                  key={item.value}
-                  style={styles.quickReplyChip}
+                  key={String(item.value)}
+                  style={[
+                    styles.quickReplyChip,
+                    item.secondary && styles.quickReplyChipSecondary,
+                  ]}
                   activeOpacity={0.7}
                   onPress={() => currentHandler(item.value)}
                 >
-                  <Text style={styles.quickReplyText}>{item.label}</Text>
+                  <Text style={[
+                    styles.quickReplyText,
+                    item.secondary && styles.quickReplyTextSecondary,
+                  ]}>{item.label}</Text>
+                  {item.description && (
+                    <Text style={styles.quickReplyDescription}>{item.description}</Text>
+                  )}
                 </TouchableOpacity>
               ))}
             </Animated.View>
+          )}
+
+          {/* Form steps */}
+          {!typingMessageId && !loading && showFormStep && (
+            <View style={styles.formContainer}>
+              {step === STEPS.BEHAVIOR_PROFILE && (
+                <>
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleLabelContainer}>
+                      <Text style={styles.toggleLabel}>Unpredictable schedule?</Text>
+                      <Text style={styles.toggleDescription}>Work shifts, travel, etc.</Text>
+                    </View>
+                    <Switch
+                      value={formData.irregularSchedule || false}
+                      onValueChange={(v) => setFormData((prev) => ({ ...prev, irregularSchedule: v }))}
+                      trackColor={{ true: theme.colors.yellow }}
+                    />
+                  </View>
+
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleLabelContainer}>
+                      <Text style={styles.toggleLabel}>Energy varies day to day?</Text>
+                      <Text style={styles.toggleDescription}>Some days great, others not</Text>
+                    </View>
+                    <Switch
+                      value={formData.energyVaries || false}
+                      onValueChange={(v) => setFormData((prev) => ({ ...prev, energyVaries: v }))}
+                      trackColor={{ true: theme.colors.yellow }}
+                    />
+                  </View>
+
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleLabelContainer}>
+                      <Text style={styles.toggleLabel}>All-or-nothing tendency?</Text>
+                      <Text style={styles.toggleDescription}>Perfect or skip entirely</Text>
+                    </View>
+                    <Switch
+                      value={formData.perfectionism || false}
+                      onValueChange={(v) => setFormData((prev) => ({ ...prev, perfectionism: v }))}
+                      trackColor={{ true: theme.colors.yellow }}
+                    />
+                  </View>
+
+                  <Text style={styles.formLabel}>Current stress level</Text>
+                  <View style={styles.selectRow}>
+                    {["Low", "Medium", "High"].map((level) => (
+                      <TouchableOpacity
+                        key={level}
+                        style={[
+                          styles.selectChip,
+                          formData.stressLevel === level.toUpperCase() && styles.selectChipActive,
+                        ]}
+                        onPress={() => setFormData((prev) => ({ ...prev, stressLevel: level.toUpperCase() }))}
+                      >
+                        <Text style={styles.selectChipText}>{level}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity style={styles.formButton} onPress={handleBehaviorProfileSubmit}>
+                    <Text style={styles.formButtonText}>Continue</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           )}
 
           {loading && (
@@ -755,30 +1247,21 @@ export default function AIOnboardingScreen() {
                 navigation.goBack();
               }}
             >
-              <Text style={styles.doneButtonText}>Close</Text>
+              <Text style={styles.doneButtonText}>Start training</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
 
         {/* Continue button for INTRO */}
         {step === STEPS.INTRO && !typingMessageId && (
-          <Animated.View
-            style={[
-              styles.inputArea,
-              {
-                paddingBottom: Math.max(insets.bottom, 16),
-                opacity: continueButtonAnim,
-                transform: [{ translateY: continueButtonAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                })}],
-              }
-            ]}
-          >
-            <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-              <Text style={styles.continueButtonText}>Continue</Text>
+          <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <TouchableOpacity
+              style={styles.continueButton}
+              onPress={handleIntroContinue}
+            >
+              <Text style={styles.continueButtonText}>Get started</Text>
             </TouchableOpacity>
-          </Animated.View>
+          </View>
         )}
 
         {/* Text input */}
@@ -787,13 +1270,24 @@ export default function AIOnboardingScreen() {
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
-                placeholder={getPlaceholder()}
+                placeholder={
+                  step === STEPS.GOAL_INPUT
+                    ? "Type your goal..."
+                    : step === STEPS.CURRENT_STATE
+                    ? "Describe your current situation..."
+                    : step === STEPS.CONSTRAINTS
+                    ? "Any constraints..."
+                    : step === STEPS.EVENT_AMBITION && userData.pendingAmbition
+                    ? "Your target..."
+                    : "Type here..."
+                }
                 placeholderTextColor={theme.colors.textMuted}
                 value={input}
                 onChangeText={setInput}
                 onSubmitEditing={handleSubmit}
                 returnKeyType="send"
                 editable={!loading}
+                multiline={step === STEPS.CURRENT_STATE || step === STEPS.CONSTRAINTS}
               />
               <TouchableOpacity
                 style={[styles.sendButton, (!input.trim() || loading) && styles.sendButtonDisabled]}
@@ -829,12 +1323,64 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.screenPadding,
     paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   headerTitle: {
     fontSize: 17,
     fontWeight: "600",
     color: theme.colors.text,
+  },
+  progressContainer: {
+    height: 3,
+    backgroundColor: theme.colors.border,
+    marginHorizontal: theme.spacing.screenPadding,
+    borderRadius: 2,
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: theme.colors.yellow,
+    borderRadius: 2,
+  },
+  lockedContainer: {
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    gap: theme.spacing.sm,
+  },
+  lockedItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing.sm,
+  },
+  lockedNumber: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.yellow,
+    width: 18,
+    height: 18,
+    textAlign: "center",
+    lineHeight: 18,
+    backgroundColor: `${theme.colors.yellow}20`,
+    borderRadius: 9,
+    overflow: "hidden",
+  },
+  lockedContent: {
+    flex: 1,
+  },
+  lockedLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: theme.colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  lockedText: {
+    fontSize: 14,
+    color: theme.colors.text,
+    lineHeight: 20,
   },
   messagesContainer: {
     flex: 1,
@@ -842,37 +1388,6 @@ const styles = StyleSheet.create({
   messagesContent: {
     padding: theme.spacing.screenPadding,
     paddingBottom: 200,
-  },
-  welcomeContainer: {
-    alignItems: "center",
-    paddingVertical: theme.spacing.xxl,
-  },
-  welcomeEmoji: {
-    fontSize: 48,
-    marginBottom: theme.spacing.md,
-  },
-  welcomeTitle: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-  },
-  welcomeSubtitle: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    marginBottom: theme.spacing.lg,
-  },
-  startButton: {
-    backgroundColor: theme.colors.yellow,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.md,
-  },
-  startButtonText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: theme.colors.black,
   },
   messageBubble: {
     marginBottom: theme.spacing.sm,
@@ -901,27 +1416,19 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   aiTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 22,
+    fontWeight: "700",
     color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+    marginVertical: theme.spacing.md,
   },
   userText: {
     color: theme.colors.text,
     fontSize: 14,
-  },
-  doneButton: {
-    alignSelf: "center",
-    backgroundColor: theme.colors.yellow,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.md,
-    marginTop: theme.spacing.md,
-  },
-  doneButtonText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: theme.colors.black,
   },
   inputArea: {
     paddingHorizontal: theme.spacing.screenPadding,
@@ -980,6 +1487,17 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: theme.colors.textSecondary,
   },
+  quickReplyDescription: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+  },
+  quickReplyChipSecondary: {
+    borderColor: theme.colors.border,
+  },
+  quickReplyTextSecondary: {
+    color: theme.colors.textMuted,
+  },
   inlinePillsContainer: {
     flexDirection: "column",
     gap: theme.spacing.xs,
@@ -990,5 +1508,92 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: theme.colors.textMuted,
+  },
+  doneButton: {
+    alignSelf: "center",
+    backgroundColor: theme.colors.yellow,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    marginTop: theme.spacing.md,
+  },
+  doneButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: theme.colors.black,
+  },
+  // Form styles
+  formContainer: {
+    marginTop: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+  },
+  selectRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs,
+  },
+  selectColumn: {
+    flexDirection: "column",
+    gap: theme.spacing.xs,
+  },
+  selectChip: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  selectChipWide: {
+    width: "100%",
+  },
+  selectChipActive: {
+    borderColor: theme.colors.yellow,
+    backgroundColor: `${theme.colors.yellow}15`,
+  },
+  selectChipText: {
+    fontSize: 13,
+    color: theme.colors.text,
+  },
+  formButton: {
+    backgroundColor: theme.colors.yellow,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    marginTop: theme.spacing.lg,
+  },
+  formButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: theme.colors.black,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  toggleLabelContainer: {
+    flex: 1,
+    marginRight: theme.spacing.md,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: theme.colors.text,
+  },
+  toggleDescription: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginTop: 2,
   },
 });

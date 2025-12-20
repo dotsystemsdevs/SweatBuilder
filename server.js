@@ -27,6 +27,33 @@ Style:
 
 You ONLY respond with JSON when requested.`;
 
+// Enhanced system prompt for new onboarding v2
+const SYSTEM_PROMPT_V2 = `You are an expert training coach and program designer. Calm, supportive, never judgmental.
+
+HARD PRINCIPLES (NEVER BREAK THESE):
+1. Onboarding = the entire plan. All workouts must be fully defined.
+2. AI coach can ONLY adapt within defined limits - never invent new structure.
+3. Constraints are unbreakable rules.
+4. When unclear, choose SAFE + SUSTAINABLE.
+5. The system must work for: chaotic lives, low energy, stress, missed workouts.
+
+INTENT SYSTEM (why user trains):
+- FUNKTION = functional movement/capability
+- KANSLA = feel good/mood
+- LIVSSTIL = lifestyle/habit
+- PRESTATION = performance/results
+- EXPERIMENT = trying something new
+
+Primary intent can NEVER be sacrificed for secondary.
+
+TONE:
+- Never judgmental
+- Never extreme
+- Never pushy
+- Safe, everyday, professional
+
+You ONLY respond with valid JSON.`;
+
 // Fallbacks
 const FALLBACKS = {
   interpretGoal: {
@@ -434,6 +461,601 @@ Respond briefly and helpfully. Focus on training and health. Max 2-3 sentences.`
         const text = await callAI(SYSTEM_PROMPT, chatPrompt, 256);
         const reply = text || "I didn't quite catch that. Can you say it again?";
         return res.json({ ok: true, data: { reply } });
+      }
+
+      // ==================== INTERPRET_GOAL_V2 ====================
+      // Enhanced goal interpretation with level, intent, direction, risk
+      case "INTERPRET_GOAL_V2": {
+        const { goalText } = payload || {};
+        if (!goalText) {
+          return res.json({
+            ok: true,
+            data: {
+              type: "NON_EVENT",
+              level: 1,
+              intent: "LIVSSTIL",
+              direction: "",
+              displayTitle: "",
+              risk: [],
+              confidence: "low",
+            },
+          });
+        }
+
+        const prompt = `Analyze this training goal deeply. Return ONLY JSON.
+
+Goal: "${goalText}"
+
+CLASSIFICATION RULES:
+
+1. TYPE (EVENT vs NON_EVENT):
+   - EVENT = mentions specific race, competition, event with date/deadline
+   - NON_EVENT = general fitness, strength, health, lifestyle goals
+
+2. LEVEL (1-5):
+   - 1 = Complete beginner, no training background
+   - 2 = Some experience, inconsistent
+   - 3 = Moderate experience, trains sometimes
+   - 4 = Experienced, trains regularly
+   - 5 = Elite/competitive athlete
+
+3. INTENT (primary motivation):
+   - FUNKTION = wants functional ability (run 5k, lift X kg, do pull-ups)
+   - KANSLA = wants to feel better (mood, energy, mental health)
+   - LIVSSTIL = wants sustainable habit (routine, consistency)
+   - PRESTATION = wants measurable performance (time, weight, distance)
+   - EXPERIMENT = wants to try something new (new sport, challenge)
+
+4. DIRECTION: What specifically they want to achieve (brief phrase)
+
+5. DISPLAY_TITLE: A SHORT, CLEAN, MOTIVATING goal title (2-6 words max).
+   This is the user's goal displayed as a punchy statement.
+
+   RULES FOR DISPLAY_TITLE:
+   - NO dates, NO years, NO "in X weeks"
+   - Include event name if mentioned
+   - Include target (time, weight, distance) if mentioned
+   - Make it sound like a badge/achievement
+
+   Examples:
+   - "I want to run a marathon in under 5 hours" → "Sub-5h Marathon"
+   - "I want to run Boston Marathon in under 4 hours" → "Sub-4h Boston Marathon"
+   - "I want to run Stockholm Marathon next year" → "Stockholm Marathon"
+   - "I want to finish Ironman 70.3" → "Ironman 70.3 Finish"
+   - "I want to get stronger and build muscle" → "Build Strength"
+   - "I want to feel better and have more energy" → "Better Energy & Mood"
+   - "I want to bench press 100kg" → "100kg Bench Press"
+   - "I want to lose weight and get in shape" → "Get in Shape"
+   - "I want to be able to do 10 pull-ups" → "10 Pull-ups"
+   - "I want to run 5k" → "Run 5K"
+   - "I want to run Lidingöloppet under 2 hours" → "Sub-2h Lidingöloppet"
+
+   Remove ALL filler words. Make it punchy like a goal badge.
+
+6. RISK: Any concerns or red flags (overtraining, injury risk, unrealistic)
+
+Format:
+{
+  "type": "EVENT" | "NON_EVENT",
+  "level": 1-5,
+  "intent": "FUNKTION" | "KANSLA" | "LIVSSTIL" | "PRESTATION" | "EXPERIMENT",
+  "direction": "brief description of what they want",
+  "displayTitle": "Short 2-5 word goal title",
+  "risk": ["risk1", "risk2"] or [],
+  "confidence": "high" | "medium" | "low",
+  "needsEventDetails": true | false
+}`;
+
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 512);
+        const parsed = safeJsonParse(text);
+        return res.json({
+          ok: true,
+          data: parsed || {
+            type: "NON_EVENT",
+            level: 2,
+            intent: "LIVSSTIL",
+            direction: goalText,
+            displayTitle: goalText,
+            risk: [],
+            confidence: "low",
+            needsEventDetails: false,
+          },
+        });
+      }
+
+      // ==================== ANALYZE_EVENT ====================
+      // Detailed event analysis with realism check
+      case "ANALYZE_EVENT": {
+        const { eventName, eventType, eventDate, currentState } = payload || {};
+
+        const prompt = `Analyze this training event and check if it's realistic.
+
+Event:
+- Name: ${eventName || "unknown"}
+- Type: ${eventType || "unknown"}
+- Date: ${eventDate || "unknown"}
+
+User's current state:
+- Sessions per week: ${currentState?.sessionsPerWeek || "unknown"}
+- Session duration: ${currentState?.timePerSession || "unknown"} minutes
+- Training background: ${currentState?.trainingBackground || "unknown"}
+- Injuries/limitations: ${currentState?.injuries || "none mentioned"}
+
+ANALYSIS RULES:
+1. Calculate days until event
+2. Assess if user has enough time to prepare
+3. If not realistic, suggest adjustments (more time, lower goal, etc.)
+4. Never say "impossible" - always offer alternatives
+
+Return ONLY JSON:
+{
+  "eventAnalysis": {
+    "name": "official event name or user's input",
+    "type": "marathon | half-marathon | triathlon | cycling | swimming | other",
+    "date": "YYYY-MM-DD or null",
+    "daysUntil": number or null,
+    "distance": "distance string or null",
+    "location": "location or null"
+  },
+  "realismCheck": {
+    "isRealistic": true | false,
+    "reason": "explanation",
+    "suggestedAdjustment": "if not realistic, what to suggest",
+    "minimumWeeksNeeded": number
+  },
+  "recommendedStrategy": "BASE_BUILD_PEAK_TAPER phases description"
+}`;
+
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 1024);
+        const parsed = safeJsonParse(text);
+        return res.json({
+          ok: true,
+          data: parsed || {
+            eventAnalysis: { name: eventName },
+            realismCheck: { isRealistic: true, reason: "Unable to analyze" },
+            recommendedStrategy: "Standard periodization",
+          },
+        });
+      }
+
+      // ==================== PROFILE_BEHAVIOR ====================
+      // Analyze behavior patterns from user responses
+      case "PROFILE_BEHAVIOR": {
+        const {
+          irregularSchedule,
+          energyLevels,
+          perfectionism,
+          stressLevel,
+          preferredMode,
+        } = payload || {};
+
+        // This is primarily a pass-through with some interpretation
+        const profile = {
+          irregularSchedule: irregularSchedule === true || irregularSchedule === "yes",
+          energyNotMotivation: energyLevels === "varies" || energyLevels === "low",
+          perfectionism: perfectionism === true || perfectionism === "yes",
+          stressLevel: stressLevel || "MEDIUM",
+          preferredMode: preferredMode || "JUST_TELL_ME",
+        };
+
+        // Generate coaching notes based on profile
+        const prompt = `Based on this behavior profile, generate brief coaching adaptations.
+
+Profile:
+- Irregular schedule: ${profile.irregularSchedule}
+- Energy varies (≠ motivation): ${profile.energyNotMotivation}
+- Perfectionist tendencies: ${profile.perfectionism}
+- Stress level: ${profile.stressLevel}
+- Preferred mode: ${profile.preferredMode}
+
+Return ONLY JSON:
+{
+  "adaptations": ["adaptation1", "adaptation2", "adaptation3"],
+  "coachingTone": "description of how to communicate with this user",
+  "riskFactors": ["risk1"] or []
+}`;
+
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 512);
+        const parsed = safeJsonParse(text);
+
+        return res.json({
+          ok: true,
+          data: {
+            profile,
+            ...parsed,
+          },
+        });
+      }
+
+      // ==================== INTERPRET_CURRENT_STATE ====================
+      // AI interprets user's current state description
+      case "INTERPRET_CURRENT_STATE": {
+        const { description, goal } = payload || {};
+
+        if (!description) {
+          return res.json({
+            ok: true,
+            data: {
+              summary: "No training background provided",
+              displaySummary: "No background",
+              level: 1,
+              frequency: "none",
+              experience: "beginner",
+              limitations: [],
+              insights: [],
+            },
+          });
+        }
+
+        const prompt = `Analyze this person's current training situation. They want to: "${goal?.displayTitle || goal?.direction || goal?.raw || "get fit"}".
+
+Their description: "${description}"
+
+CRITICAL: Check if essential information is MISSING based on their goal:
+- For strength goals (bench X kg, squat, deadlift): Need current lift numbers
+- For running goals (5k, 10k, marathon): Need current running ability/distance
+- For weight goals: Need current weight or body composition info
+- For event goals: Need current fitness level for that sport
+
+If critical info is missing, set needsMoreInfo = true and specify what's missing.
+
+Extract and interpret:
+1. Current training frequency (how often they train)
+2. Experience level (beginner/intermediate/experienced)
+3. Relevant background for their goal
+4. Any limitations or concerns
+5. Key insights that will affect their plan
+6. What critical info is MISSING for this specific goal?
+
+Be concise. Write in second person ("You train...", "You have...").
+
+Return ONLY JSON:
+{
+  "summary": "2-3 sentence summary of their situation written TO them",
+  "displaySummary": "SHORT 5-10 word summary for display, e.g. 'Runs 2x/week, 5km max' or 'Gym 3x/week, intermediate' or 'Beginner, no current training'",
+  "level": 1-5 (1=complete beginner, 5=very experienced),
+  "frequency": "none" | "occasional" | "1-2x/week" | "3-4x/week" | "5+/week",
+  "experience": "beginner" | "some experience" | "intermediate" | "experienced",
+  "limitations": ["limitation1"] or [],
+  "insights": ["insight1", "insight2"] (things that will affect the plan),
+  "needsMoreInfo": true | false,
+  "missingInfo": "What specific info is needed, phrased as a question" or null
+}`;
+
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 512);
+        const parsed = safeJsonParse(text);
+        return res.json({
+          ok: true,
+          data: parsed || {
+            summary: description,
+            displaySummary: description.slice(0, 50),
+            level: 2,
+            frequency: "occasional",
+            experience: "some experience",
+            limitations: [],
+            insights: [],
+          },
+        });
+      }
+
+      // ==================== CALCULATE_GAP ====================
+      // Gap analysis between current state and goal
+      case "CALCULATE_GAP": {
+        const { goal, currentState, event } = payload || {};
+
+        const prompt = `Calculate the gap between user's current state and their goal.
+
+Goal:
+- Type: ${goal?.type || "NON_EVENT"}
+- Level: ${goal?.level || 2}
+- Intent: ${goal?.intent || "LIVSSTIL"}
+- Direction: ${goal?.direction || "general fitness"}
+
+Current state:
+- Sessions per week: ${currentState?.sessionsPerWeek || 0}
+- Session duration: ${currentState?.timePerSession || 0} minutes
+- Training background: ${currentState?.trainingBackground || "none"}
+- Injuries: ${currentState?.injuries || "none"}
+
+${event?.name ? `Event: ${event.name} on ${event.date}` : "No specific event"}
+
+Determine:
+1. Current fitness level (1-5)
+2. Required level for goal (1-5)
+3. Time needed to bridge gap
+4. Is this realistic?
+
+Return ONLY JSON:
+{
+  "currentLevel": 1-5,
+  "targetLevel": 1-5,
+  "gapSize": "small" | "medium" | "large",
+  "timeframe": "X weeks",
+  "isRealistic": true | false,
+  "adjustmentSuggestion": "if not realistic, suggest here"
+}`;
+
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 512);
+        const parsed = safeJsonParse(text);
+        return res.json({
+          ok: true,
+          data: parsed || {
+            currentLevel: 2,
+            targetLevel: 3,
+            gapSize: "medium",
+            timeframe: "8 weeks",
+            isRealistic: true,
+            adjustmentSuggestion: "",
+          },
+        });
+      }
+
+      // ==================== GENERATE_STRATEGY ====================
+      // Generate training strategy/periodization
+      case "GENERATE_STRATEGY": {
+        const { goalType, gap, constraints, event, ambition } = payload || {};
+
+        const isEvent = goalType === "EVENT";
+
+        const prompt = `Generate a training strategy/periodization plan.
+
+Goal type: ${goalType}
+${isEvent ? `Event: ${event?.name} in ${event?.daysUntil} days` : "No specific event deadline"}
+Ambition level: ${ambition || "BALANCED"}
+Gap: ${gap?.gapSize || "medium"} (current: ${gap?.currentLevel}, target: ${gap?.targetLevel})
+
+Constraints:
+- Max sessions/week: ${constraints?.sessionsPerWeek || 3}
+- Max time/session: ${constraints?.timePerSession || 45} minutes
+- Locations: ${constraints?.locations?.join(", ") || "flexible"}
+- Equipment: ${constraints?.equipment?.join(", ") || "minimal"}
+- Prohibitions: ${constraints?.prohibitions?.join(", ") || "none"}
+
+${isEvent ? `
+For EVENT goals, use this periodization:
+1. BASE (30-40% of time) - Build aerobic foundation, technique
+2. BUILD (30-40% of time) - Increase intensity, sport-specific
+3. PEAK (15-20% of time) - Race-specific, high intensity
+4. TAPER (10-15% of time) - Reduce volume, maintain intensity
+` : `
+For NON-EVENT goals, use this periodization:
+1. SAFE (2-3 weeks) - Establish routine, low intensity
+2. BUILD (4-6 weeks) - Gradual progression
+3. MAINTAIN (ongoing) - Sustainable level
+4. TEST (optional) - Occasional assessment
+`}
+
+Return ONLY JSON:
+{
+  "strategyType": "${isEvent ? "BASE_BUILD_PEAK_TAPER" : "SAFE_BUILD_MAINTAIN_TEST"}",
+  "totalWeeks": number,
+  "phases": [
+    {
+      "name": "phase name",
+      "weeks": [1, 2, 3],
+      "focus": "what to focus on",
+      "intensityRange": [minPercent, maxPercent],
+      "sessionsPerWeek": number
+    }
+  ],
+  "deloadWeeks": [week numbers],
+  "explanation": "brief explanation of the strategy"
+}`;
+
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 1024);
+        const parsed = safeJsonParse(text);
+        return res.json({
+          ok: true,
+          data: parsed || {
+            strategyType: isEvent ? "BASE_BUILD_PEAK_TAPER" : "SAFE_BUILD_MAINTAIN_TEST",
+            totalWeeks: 8,
+            phases: [{ name: "Build", weeks: [1, 2, 3, 4, 5, 6, 7, 8], focus: "General", intensityRange: [50, 70] }],
+            deloadWeeks: [4, 8],
+          },
+        });
+      }
+
+      // ==================== GENERATE_MASTER_PLAN_V2 ====================
+      // Full master plan with workout variants
+      case "GENERATE_MASTER_PLAN_V2": {
+        const {
+          goal,
+          intent,
+          gap,
+          event,
+          constraints,
+          behaviorProfile,
+          strategy,
+          ambition,
+        } = payload || {};
+
+        const prompt = `Generate a COMPLETE master training plan with all workout details.
+
+USER PROFILE:
+- Goal: ${goal?.direction || "general fitness"} (${goal?.type || "NON_EVENT"})
+- Intent: ${intent?.primary || "LIVSSTIL"}
+- Current level: ${gap?.currentLevel || 2}, Target: ${gap?.targetLevel || 3}
+- Ambition: ${ambition || "BALANCED"}
+
+${event?.name ? `EVENT: ${event.name} on ${event.date} (${event.daysUntil} days)` : ""}
+
+CONSTRAINTS (UNBREAKABLE):
+- Sessions/week: ${constraints?.sessionsPerWeek || 3}
+- Time/session: ${constraints?.timePerSession || 45} min
+- Locations: ${constraints?.locations?.join(", ") || "any"}
+- Equipment: ${constraints?.equipment?.join(", ") || "minimal"}
+- Prohibitions: ${constraints?.prohibitions?.join(", ") || "none"}
+
+BEHAVIOR:
+- Irregular schedule: ${behaviorProfile?.irregularSchedule || false}
+- Energy varies: ${behaviorProfile?.energyNotMotivation || false}
+- Perfectionist: ${behaviorProfile?.perfectionism || false}
+- Stress: ${behaviorProfile?.stressLevel || "MEDIUM"}
+
+STRATEGY:
+${JSON.stringify(strategy, null, 2)}
+
+RULES FOR PLAN GENERATION:
+1. Every workout MUST have 3 versions:
+   - normal: Full workout as designed
+   - light: 60% volume/intensity (for low energy days)
+   - short: Core exercises only, 50% time (for time-pressed days)
+
+2. Include environment alternatives where possible
+
+3. For STRENGTH workouts include:
+   - Exercise name, sets, reps
+   - Weight guidance (RPE or % of max)
+   - Rest periods
+   - Alternatives for each exercise
+
+4. For CARDIO workouts include:
+   - Duration/distance
+   - Intensity zone (1-5)
+   - Interval structure if applicable
+
+5. Include deload weeks as specified in strategy
+
+Return ONLY JSON:
+{
+  "masterPlan": {
+    "totalWeeks": number,
+    "currentWeek": 1,
+    "mode": "FIXED" | "ROLLING",
+    "strategy": {
+      "type": "strategy type",
+      "phases": [from strategy]
+    }
+  },
+  "weeklyStructure": {
+    "preferredDays": ["monday", "wednesday", "friday"],
+    "restDays": ["sunday"],
+    "template": [
+      { "day": "monday", "workoutType": "strength", "timeSlot": "FLEXIBLE" }
+    ]
+  },
+  "workouts": [
+    {
+      "id": "week1-day1",
+      "weekNumber": 1,
+      "dayOfWeek": "monday",
+      "type": "STRENGTH",
+      "title": "workout title",
+      "purpose": "what this workout achieves",
+      "duration": 45,
+      "versions": {
+        "normal": {
+          "exercises": [
+            { "name": "exercise", "sets": 3, "reps": "8-10", "rest": 90, "notes": "" }
+          ],
+          "totalDuration": 45
+        },
+        "light": {
+          "exercises": [...],
+          "totalDuration": 30
+        },
+        "short": {
+          "exercises": [...],
+          "totalDuration": 20
+        }
+      }
+    }
+  ],
+  "progressionRules": {
+    "weeklyVolumeIncrease": 0.05,
+    "deloadFrequency": 4,
+    "intensityProgression": "LINEAR"
+  },
+  "allowedAdjustments": {
+    "canSwitchVersion": true,
+    "canScaleIntensity": { "min": -20, "max": 10 },
+    "canSwapExercise": true,
+    "canMoveWorkout": true,
+    "canEnablePauseMode": true
+  }
+}
+
+Generate workouts for week 1 only. The pattern repeats with progression.
+Focus on QUALITY over quantity. Make each workout purposeful.`;
+
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 4096);
+        const parsed = safeJsonParse(text);
+
+        if (!parsed) {
+          return res.json({
+            ok: true,
+            data: {
+              masterPlan: {
+                totalWeeks: strategy?.totalWeeks || 8,
+                currentWeek: 1,
+                mode: "FIXED",
+                strategy: strategy || { type: "SAFE_BUILD_MAINTAIN_TEST", phases: [] },
+              },
+              weeklyStructure: {
+                preferredDays: ["monday", "wednesday", "friday"],
+                restDays: ["sunday"],
+              },
+              workouts: [],
+              progressionRules: {
+                weeklyVolumeIncrease: 0.05,
+                deloadFrequency: 4,
+              },
+              allowedAdjustments: {
+                canSwitchVersion: true,
+                canScaleIntensity: { min: -20, max: 10 },
+                canSwapExercise: true,
+                canMoveWorkout: true,
+                canEnablePauseMode: true,
+              },
+            },
+          });
+        }
+
+        return res.json({ ok: true, data: parsed });
+      }
+
+      // ==================== SUMMARIZE_PLAN_V2 ====================
+      // Generate trust-building summary for new plan
+      case "SUMMARIZE_PLAN_V2": {
+        const { dataContract } = payload || {};
+
+        const prompt = `Write a calm, trust-building summary of this training plan.
+
+Plan overview:
+- Goal: ${dataContract?.goal?.direction || "general fitness"}
+- Type: ${dataContract?.goal?.type || "NON_EVENT"}
+- Intent: ${dataContract?.intent?.primary || "LIVSSTIL"}
+- Duration: ${dataContract?.masterPlan?.totalWeeks || 8} weeks
+- Sessions/week: ${dataContract?.constraints?.sessionsPerWeek || 3}
+- Current level: ${dataContract?.gap?.currentLevel || 2}
+
+${dataContract?.event?.name ? `Event: ${dataContract.event.name}` : ""}
+
+WRITE A SUMMARY THAT:
+1. Starts by acknowledging what the user told you
+2. Explains WHY this plan is designed this way
+3. Mentions the safety nets (light/short versions)
+4. Ends by asking if this feels realistic
+
+TONE: Calm, professional, no hype, no exclamation marks.
+
+Return ONLY JSON:
+{
+  "summary": "the summary text (3-5 sentences)",
+  "keyPoints": ["point1", "point2", "point3"],
+  "safetyNets": ["you can switch to light version", "short version for busy days", "pause mode available"]
+}`;
+
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 1024);
+        const parsed = safeJsonParse(text);
+        return res.json({
+          ok: true,
+          data: parsed || {
+            summary: "This plan is built around your goal and current situation. Does this feel realistic for you?",
+            keyPoints: [],
+            safetyNets: ["Light version available", "Short version for busy days"],
+          },
+        });
       }
 
       // ==================== DEFAULT ====================
