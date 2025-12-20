@@ -292,14 +292,14 @@ export default function AIOnboardingScreen() {
     await updateEvent(eventData);
 
     // Use AI's displayTitle (clean normalized version) for the summary
-    const event = userData.event || eventData;
-    let summary = userData.goal?.displayTitle || event.name || userData.goal?.raw;
+    // Use eventData directly since state hasn't updated yet
+    let summary = userData.goal?.displayTitle || eventData.name || userData.goal?.raw;
 
     // Add date if available and not already in displayTitle
-    if (event.date) {
-      const dateStr = new Date(event.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    if (eventData.date) {
+      const dateStr = new Date(eventData.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
       summary += `\n📅 ${dateStr}`;
-      if (event.daysUntil > 0) summary += ` — ${event.daysUntil} days`;
+      if (eventData.daysUntil > 0) summary += ` — ${eventData.daysUntil} days`;
     }
 
     // Add ambition
@@ -724,14 +724,18 @@ export default function AIOnboardingScreen() {
             break;
           }
 
+          // Combine with previous goal text if this is a follow-up answer
+          const previousGoalText = userData.goal?.raw || "";
+          const fullGoalText = previousGoalText ? `${previousGoalText}\n${text}` : text;
+
           // Call AI to interpret and normalize the goal
-          let goalData = { raw: text, type: GOAL_TYPES.NON_EVENT };
+          let goalData = { raw: fullGoalText, type: GOAL_TYPES.NON_EVENT };
           let aiDisplayTitle = text;
           let needsMoreInfo = false;
           let missingInfoMsg = null;
 
           try {
-            const res = await interpretGoalV2(text);
+            const res = await interpretGoalV2(fullGoalText);
             if (res?.ok && res?.data) {
               const { type, level, intent, direction, displayTitle, confidence, risk, needsEventDetails, needsMoreInfo: apiNeedsMore, missingInfo } = res.data;
 
@@ -739,10 +743,12 @@ export default function AIOnboardingScreen() {
               if (apiNeedsMore && missingInfo) {
                 needsMoreInfo = true;
                 missingInfoMsg = missingInfo;
+                // Store partial goal so we can accumulate
+                goalData = { raw: fullGoalText, type: GOAL_TYPES.NON_EVENT, displayTitle: displayTitle || text };
               } else {
                 // AI successfully interpreted - store normalized data
                 goalData = {
-                  raw: text,
+                  raw: fullGoalText,
                   type: type || GOAL_TYPES.NON_EVENT,
                   level,
                   displayTitle: displayTitle || direction || text,
@@ -758,17 +764,18 @@ export default function AIOnboardingScreen() {
                   aiDisplayTitle = direction;
                 }
 
-                console.log("[Onboarding] AI normalized:", { original: text, displayTitle: aiDisplayTitle });
+                console.log("[Onboarding] AI normalized:", { original: fullGoalText, displayTitle: aiDisplayTitle });
               }
             }
           } catch (apiError) {
             console.log("[Onboarding] API failed, using text directly");
           }
 
-          // If AI needs more info, ask and stay in GOAL_INPUT
+          // If AI needs more info, store partial and ask follow-up
           if (needsMoreInfo && missingInfoMsg) {
+            setUserData((prev) => ({ ...prev, goal: goalData }));
             setShowTextInput(true);
-            addMessage(missingInfoMsg, true, null);
+            addMessage(missingInfoMsg, true, "One more thing 🎯");
             break;
           }
 
