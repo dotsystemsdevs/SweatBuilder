@@ -486,12 +486,16 @@ Respond briefly and helpfully. Focus on training and health. Max 2-3 sentences.`
 
 Goal: "${goalText}"
 
-## NORMALIZATION RULES
-1. Remove filler: "hmmmm", "i think", "maybe", "i guess", "uhh", "???" → Remove
-2. Time: "under 4 hours" / "under 4h" / "below 4h" → "Sub-4h"
+## NORMALIZATION RULES (CRITICAL - displayTitle must be CLEAN)
+1. REMOVE ALL filler words: "hmmmm", "i think", "maybe", "i guess", "uhh", "yeah", "like", "now", "so", "um", "uh", "well", "just", "kinda", "???", "!!", etc.
+2. Time targets: "4 hours" / "under 4h" / "below 4h" / "yeah 4 hours" → "Sub-4h"
 3. Weight: "100 kg" / "100 kilos" → "100kg"
 4. Distance: "5 km" / "5 kilometers" → "5K"
-5. Title Case for displayTitle (max 50 chars)
+5. displayTitle = CLEAN, SHORT, PROFESSIONAL (max 30 chars)
+   - NO messy user input - extract the core goal
+   - "marathon yeah 4 hours now" → "Marathon Sub-4h"
+   - "i want to like bench 100kg" → "Bench Press 100kg"
+   - "running training yeah" → "Running" (if no target)
 
 ## VAGUE SPORT GOALS - MUST ASK FOR MORE INFO
 These goals WITHOUT specific metrics need clarification:
