@@ -255,15 +255,24 @@ const OptionChip = ({ option, selected, onPress, type, layout, disabled, index =
   const isScale = layout === 'scale';
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(8)).current;
 
   useEffect(() => {
-    // Staggered fade-in animation
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 200,
-      delay: index * 50,
-      useNativeDriver: true,
-    }).start();
+    // Staggered fade-in + slide-up animation (synced with bubble animations)
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        delay: index * 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 250,
+        delay: index * 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
 
   const handlePressIn = () => {
@@ -291,7 +300,7 @@ const OptionChip = ({ option, selected, onPress, type, layout, disabled, index =
     const isFirst = index === 0;
     const isLast = index === totalOptions - 1;
     return (
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }], flex: 1 }}>
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }], flex: 1 }}>
         <TouchableOpacity
           style={[
             styles.scaleOption,
@@ -325,7 +334,7 @@ const OptionChip = ({ option, selected, onPress, type, layout, disabled, index =
 
   if (isCard) {
     return (
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] }}>
         <TouchableOpacity
           style={[styles.cardOption, selected && styles.cardOptionSelected]}
           onPress={handlePress}
@@ -353,7 +362,7 @@ const OptionChip = ({ option, selected, onPress, type, layout, disabled, index =
 
   if (isGrid) {
     return (
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] }}>
         <TouchableOpacity
           style={[styles.gridOption, selected && styles.gridOptionSelected]}
           onPress={handlePress}
@@ -379,7 +388,7 @@ const OptionChip = ({ option, selected, onPress, type, layout, disabled, index =
 
   // Default list layout
   return (
-    <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }, { translateY: slideAnim }] }}>
       <TouchableOpacity
         style={[styles.optionChip, selected && styles.optionChipSelected]}
         onPress={handlePress}
