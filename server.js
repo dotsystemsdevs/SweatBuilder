@@ -482,56 +482,63 @@ Respond briefly and helpfully. Focus on training and health. Max 2-3 sentences.`
           });
         }
 
-        const prompt = `Interpret this goal and NORMALIZE messy input into clean format. Return ONLY JSON.
+        const prompt = `You are a fitness goal interpretation AI. Analyze this goal and return structured JSON.
 
 Goal: "${goalText}"
 
-NORMALIZATION RULES (CRITICAL):
+## NORMALIZATION RULES
 1. Remove filler: "hmmmm", "i think", "maybe", "i guess", "uhh", "???" → Remove
-2. Time format: "under 4 hours" / "under 4h" / "below 4h" → "Sub-4h"
-3. Weight format: "100 kg" / "100 kilos" → "100kg"
-4. Distance format: "5 km" / "5 kilometers" → "5K"
-5. Title Case for displayTitle
+2. Time: "under 4 hours" / "under 4h" / "below 4h" → "Sub-4h"
+3. Weight: "100 kg" / "100 kilos" → "100kg"
+4. Distance: "5 km" / "5 kilometers" → "5K"
+5. Title Case for displayTitle (max 50 chars)
 
-NORMALIZATION EXAMPLES:
-- "hmmmm i think i want to run a marathon under 4h ??" → displayTitle: "Sub-4h Marathon"
-- "maybe bench press like 100 kg or something" → displayTitle: "Bench Press 100kg"
-- "i want to do a half marathon in under 2 hours" → displayTitle: "Half Marathon Sub-2h"
-- "get stronger i guess??" → displayTitle: "Build Strength"
-- "stockholm marathon" → displayTitle: "Stockholm Marathon"
-- "lose weight like 10 kilos" → displayTitle: "Lose 10kg"
+## VAGUE SPORT GOALS - MUST ASK FOR MORE INFO
+These goals WITHOUT specific metrics need clarification:
 
-FIELDS:
-- type: "EVENT" (race/competition/deadline) or "NON_EVENT" (general goal)
-- level: 1-5 (1=beginner target, 5=elite target)
-- intent: FUNKTION | KANSLA | LIVSSTIL | PRESTATION | EXPERIMENT
-- direction: What they want (brief phrase)
-- displayTitle: CLEAN 2-6 word title (NO filler words, normalized format)
-- risk: Array of concerns or []
-- confidence: "high" | "medium" | "low"
-- needsEventDetails: true if EVENT needs date/details
-- needsMoreInfo: true ONLY if goal is too vague (e.g., "get fit", "run")
-- missingInfo: Short question if needsMoreInfo=true, else null
+POWERLIFTING/STRENGTH: "powerlifting", "olympic lifting", "weightlifting"
+→ missingInfo: "To create your powerlifting plan, I need to know:\\n\\n• Have you done powerlifting before?\\n• What are your current numbers? (squat, bench, deadlift)\\n• What's your target?"
 
-IMPORTANT: Messy informal input does NOT mean needsMoreInfo=true.
-If goal is CLEAR despite filler words, normalize it and set needsMoreInfo=false.
-Only set needsMoreInfo=true for genuinely vague goals like "get fit" or single words.
+BODYBUILDING: "bodybuilding", "hypertrophy", "build muscle", "get bigger"
+→ missingInfo: "To create your plan, I need to know:\\n\\n• What's your experience level?\\n• What's your main focus? (specific muscle groups, overall size?)\\n• Any specific targets?"
 
-Return JSON:
+RUNNING (no distance): "running", "get into running", "improve running"
+→ missingInfo: "To create your running plan, I need to know:\\n\\n• What distance? (5K, 10K, half marathon, marathon?)\\n• What's your goal? (finish, specific time, improve pace?)\\n• Have you run before?"
+
+CYCLING (no target): "cycling", "get into cycling"
+→ missingInfo: "To create your cycling plan, I need to know:\\n\\n• What's your goal? (distance, speed, event?)\\n• What type? (road, indoor, long rides?)\\n• Any specific targets?"
+
+SWIMMING (no target): "swimming", "get into swimming"
+→ missingInfo: "To create your swimming plan, I need to know:\\n\\n• What's your goal? (distance, technique, speed?)\\n• What type? (pool, open water, triathlon?)\\n• Any specific targets?"
+
+## WHEN NOT TO ASK (proceed without needsMoreInfo):
+- "get stronger" → OK (general strength)
+- "lose weight" → OK (general goal)
+- "feel better" → OK (wellness)
+- Goals WITH metrics: "bench 100kg", "run 5K", "marathon sub-4h" → OK
+
+## EXAMPLES
+"powerlifting" → needsMoreInfo: true, displayTitle: "Powerlifting"
+"bench 100kg" → needsMoreInfo: false, displayTitle: "Bench Press 100kg"
+"running" → needsMoreInfo: true, displayTitle: "Running"
+"marathon under 4 hours" → needsMoreInfo: false, displayTitle: "Marathon Sub-4h"
+"get stronger" → needsMoreInfo: false, displayTitle: "Build Strength"
+
+## OUTPUT (JSON only)
 {
   "type": "EVENT" | "NON_EVENT",
   "level": 1-5,
-  "intent": "...",
-  "direction": "...",
+  "intent": "FUNKTION" | "KANSLA" | "LIVSSTIL" | "PRESTATION" | "EXPERIMENT",
+  "direction": "Brief description",
   "displayTitle": "Clean Normalized Title",
+  "confidence": 0.0-1.0,
   "risk": [],
-  "confidence": "high" | "medium" | "low",
-  "needsEventDetails": true | false,
-  "needsMoreInfo": true | false,
-  "missingInfo": "Short question" | null
+  "needsEventDetails": boolean,
+  "needsMoreInfo": boolean,
+  "missingInfo": "Sport-specific question with bullet points" | null
 }`;
 
-        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 512);
+        const text = await callAI(SYSTEM_PROMPT_V2, prompt, 768);
         const parsed = safeJsonParse(text);
         return res.json({
           ok: true,
@@ -542,7 +549,7 @@ Return JSON:
             direction: goalText,
             displayTitle: goalText,
             risk: [],
-            confidence: "low",
+            confidence: 0.5,
             needsEventDetails: false,
             needsMoreInfo: goalText.length < 5,
             missingInfo: goalText.length < 5 ? "What specifically do you want to achieve?" : null,
