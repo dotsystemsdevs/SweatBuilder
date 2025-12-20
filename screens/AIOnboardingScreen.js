@@ -335,9 +335,14 @@ export default function AIOnboardingScreen() {
 
       setLockedGoal(goalDisplay);
 
-      // Go to current state (free text)
-      console.log("[Onboarding] GOAL_CONFIRM: Goal confirmed, going to CURRENT_STATE");
-      goToCurrentState();
+      // Goal confirmed - show coming soon (skip current state for now)
+      console.log("[Onboarding] GOAL_CONFIRM: Goal confirmed, going to DONE");
+      setStep(STEPS.DONE);
+      addMessage(
+        "Nice! Your goal is locked in. 🎯\n\nComing soon: Current state, constraints, behavior profile, and your personalized training plan.\n\nStay tuned — we're building something great for you! 🚀",
+        true,
+        "Goal set! 🔥"
+      );
     } else {
       // User wants to change - go back to goal input with current goal pre-filled
       console.log("[Onboarding] GOAL_CONFIRM: User wants to change, going back to GOAL_INPUT");
