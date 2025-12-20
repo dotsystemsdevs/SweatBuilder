@@ -33,13 +33,13 @@ const STANDARD_QUESTIONS = [
     title: 'Training Experience',
     question: 'How long have you been training regularly?',
     type: 'single',
-    layout: 'list',
+    layout: 'scale',
     options: [
-      { id: 'beginner', label: 'Just starting', emoji: '🌱' },
-      { id: '1-6months', label: '1–6 months', emoji: '🌿' },
-      { id: '6-12months', label: '6–12 months', emoji: '🌳' },
-      { id: '1-3years', label: '1–3 years', emoji: '💪' },
-      { id: '3+years', label: '3+ years', emoji: '🏆' },
+      { id: 'beginner', label: 'New', emoji: '🌱' },
+      { id: '1-6months', label: '1-6m', emoji: '🌿' },
+      { id: '6-12months', label: '6-12m', emoji: '🌳' },
+      { id: '1-3years', label: '1-3y', emoji: '💪' },
+      { id: '3+years', label: '3y+', emoji: '🏆' },
     ],
   },
   {
@@ -47,12 +47,12 @@ const STANDARD_QUESTIONS = [
     title: 'Training Frequency',
     question: 'How often do you train right now?',
     type: 'single',
-    layout: 'grid',
+    layout: 'scale',
     options: [
-      { id: '0-1', label: '0–1x', sublabel: 'per week', emoji: '1️⃣' },
-      { id: '2-3', label: '2–3x', sublabel: 'per week', emoji: '2️⃣' },
-      { id: '4-5', label: '4–5x', sublabel: 'per week', emoji: '4️⃣' },
-      { id: '6+', label: '6+', sublabel: 'per week', emoji: '🔥' },
+      { id: '0-1', label: '0-1x', emoji: '1️⃣' },
+      { id: '2-3', label: '2-3x', emoji: '2️⃣' },
+      { id: '4-5', label: '4-5x', emoji: '4️⃣' },
+      { id: '6+', label: '6+', emoji: '🔥' },
     ],
   },
   {
@@ -77,13 +77,13 @@ const STANDARD_QUESTIONS = [
     title: 'Current Level',
     question: 'How would you describe your current fitness?',
     type: 'single',
-    layout: 'cards',
+    layout: 'scale',
     important: true,
     options: [
-      { id: 'poor', label: 'Getting started', sublabel: 'Out of shape', emoji: '😅', color: '#FF6B6B' },
-      { id: 'okay', label: 'Building up', sublabel: 'Inconsistent', emoji: '🙂', color: '#FFB347' },
-      { id: 'good', label: 'Solid base', sublabel: 'Training regularly', emoji: '😊', color: '#77DD77' },
-      { id: 'great', label: 'Peak form', sublabel: 'Pushing limits', emoji: '🔥', color: '#6BCB77' },
+      { id: 'poor', label: '😅', sublabel: 'Starting' },
+      { id: 'okay', label: '🙂', sublabel: 'Building' },
+      { id: 'good', label: '😊', sublabel: 'Solid' },
+      { id: 'great', label: '🔥', sublabel: 'Peak' },
     ],
   },
   {
@@ -106,11 +106,11 @@ const STANDARD_QUESTIONS = [
     title: 'Daily Activity',
     question: 'What does your typical day look like?',
     type: 'single',
-    layout: 'cards',
+    layout: 'scale',
     options: [
-      { id: 'sedentary', label: 'Desk life', sublabel: 'Mostly sitting', emoji: '🪑' },
-      { id: 'active', label: 'On the move', sublabel: 'Active job', emoji: '🚶' },
-      { id: 'physical', label: 'Physical work', sublabel: 'Demanding job', emoji: '👷' },
+      { id: 'sedentary', label: '🪑', sublabel: 'Desk' },
+      { id: 'active', label: '🚶', sublabel: 'Active' },
+      { id: 'physical', label: '👷', sublabel: 'Physical' },
     ],
   },
   {
@@ -118,12 +118,12 @@ const STANDARD_QUESTIONS = [
     title: 'Sleep',
     question: 'How much sleep do you usually get?',
     type: 'single',
-    layout: 'grid',
+    layout: 'scale',
     options: [
       { id: '<6h', label: '< 6h', emoji: '😴' },
-      { id: '6-7h', label: '6–7h', emoji: '😐' },
-      { id: '7-8h', label: '7–8h', emoji: '😊' },
-      { id: '8+h', label: '8+ h', emoji: '😇' },
+      { id: '6-7h', label: '6-7h', emoji: '😐' },
+      { id: '7-8h', label: '7-8h', emoji: '😊' },
+      { id: '8+h', label: '8h+', emoji: '😇' },
     ],
   },
 ];
@@ -240,11 +240,12 @@ const AIBubble = ({ title, text = '', isNew, compact }) => {
   );
 };
 
-// Option Chip - supports list, grid, and card layouts with animations
-const OptionChip = ({ option, selected, onPress, type, layout, disabled, index = 0 }) => {
+// Option Chip - supports list, grid, scale and card layouts with animations
+const OptionChip = ({ option, selected, onPress, type, layout, disabled, index = 0, totalOptions = 1 }) => {
   const isMulti = type === 'multi';
   const isGrid = layout === 'grid';
   const isCard = layout === 'cards';
+  const isScale = layout === 'scale';
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -277,6 +278,43 @@ const OptionChip = ({ option, selected, onPress, type, layout, disabled, index =
     haptic('impactLight');
     onPress();
   };
+
+  // Scale layout - horizontal row with all options
+  if (isScale) {
+    const isFirst = index === 0;
+    const isLast = index === totalOptions - 1;
+    return (
+      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }], flex: 1 }}>
+        <TouchableOpacity
+          style={[
+            styles.scaleOption,
+            isFirst && styles.scaleOptionFirst,
+            isLast && styles.scaleOptionLast,
+            selected && styles.scaleOptionSelected,
+          ]}
+          onPress={handlePress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          disabled={disabled}
+          activeOpacity={1}
+        >
+          <Text style={[styles.scaleEmoji, selected && styles.scaleEmojiSelected]}>
+            {option.emoji || option.label}
+          </Text>
+          {option.sublabel && (
+            <Text style={[styles.scaleSublabel, selected && styles.scaleSublabelSelected]}>
+              {option.sublabel}
+            </Text>
+          )}
+          {!option.sublabel && option.emoji && (
+            <Text style={[styles.scaleLabel, selected && styles.scaleLabelSelected]}>
+              {option.label}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
 
   if (isCard) {
     return (
@@ -765,13 +803,19 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
             styles.optionsContainer,
             currentQuestion.layout === 'grid' && styles.optionsGrid,
             currentQuestion.layout === 'cards' && styles.optionsCards,
+            currentQuestion.layout === 'scale' && styles.optionsScale,
           ]}>
             {currentQuestion.options.map((option, optIdx) => (
-              <View key={option.id} style={currentQuestion.layout === 'grid' ? styles.gridItem : { width: '100%' }}>
+              <View key={option.id} style={
+                currentQuestion.layout === 'grid' ? styles.gridItem :
+                currentQuestion.layout === 'scale' ? styles.scaleItem :
+                { width: '100%' }
+              }>
                 <OptionChip
                   option={option}
                   selected={isSelected(option.id)}
                   onPress={() => handleSelect(option.id)}
+                  totalOptions={currentQuestion.options.length}
                   type={currentQuestion.type}
                   layout={currentQuestion.layout}
                   index={optIdx}
@@ -1083,8 +1127,66 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 10,
   },
+  optionsScale: {
+    flexDirection: 'row',
+    gap: 0,
+  },
   gridItem: {
     width: '47%',
+  },
+  scaleItem: {
+    flex: 1,
+  },
+
+  // Scale layout - horizontal row
+  scaleOption: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    minHeight: 70,
+  },
+  scaleOptionFirst: {
+    borderTopLeftRadius: theme.radius.sm,
+    borderBottomLeftRadius: theme.radius.sm,
+  },
+  scaleOptionLast: {
+    borderTopRightRadius: theme.radius.sm,
+    borderBottomRightRadius: theme.radius.sm,
+  },
+  scaleOptionSelected: {
+    backgroundColor: theme.colors.purple + '30',
+    borderColor: theme.colors.purple,
+    borderWidth: 2,
+  },
+  scaleEmoji: {
+    fontSize: 22,
+    marginBottom: 2,
+  },
+  scaleEmojiSelected: {
+    transform: [{ scale: 1.1 }],
+  },
+  scaleLabel: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+  },
+  scaleLabelSelected: {
+    color: theme.colors.text,
+    fontWeight: '600',
+  },
+  scaleSublabel: {
+    fontSize: 10,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  scaleSublabelSelected: {
+    color: theme.colors.textSecondary,
   },
 
   // Grid layout option - matches quickReplyChip exactly (but purple)
