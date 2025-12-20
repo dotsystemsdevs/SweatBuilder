@@ -344,14 +344,15 @@ export default function AIOnboardingScreen() {
         "Goal set! 🔥"
       );
     } else {
-      // User wants to change - go back to goal input with current goal pre-filled
+      // User wants to change - go back to goal input
       console.log("[Onboarding] GOAL_CONFIRM: User wants to change, going back to GOAL_INPUT");
       setLockedGoal(null); // Clear locked goal
+      // Clear previous goal data so we start fresh
+      setUserData((prev) => ({ ...prev, goal: null, event: null, isEvent: false }));
       setStep(STEPS.GOAL_INPUT);
       setShowTextInput(true);
-      // Pre-fill with current goal so user can edit it
-      setInput(userData.goal?.raw || "");
-      addMessage("No problem — edit below.", true, null);
+      setInput(""); // Start fresh, don't pre-fill
+      addMessage("No problem — what's your goal?", true, null);
     }
   };
 
@@ -705,10 +706,13 @@ export default function AIOnboardingScreen() {
 
       if (wantsToChangeGoal && step !== STEPS.GOAL_INPUT && step !== STEPS.INTRO) {
         console.log("[Onboarding] User wants to change goal, navigating back");
+        // Clear previous goal data so we start fresh
+        setUserData((prev) => ({ ...prev, goal: null, event: null, isEvent: false }));
+        setLockedGoal(null);
         setStep(STEPS.GOAL_INPUT);
         setShowTextInput(true);
-        setInput(userData.goal?.raw || "");
-        addMessage("No problem — edit your goal below.", true, "Change goal");
+        setInput(""); // Start fresh
+        addMessage("No problem — what's your new goal?", true, "Change goal");
         setLoading(false);
         return; // Exit early, don't process the step
       }
