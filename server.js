@@ -482,68 +482,53 @@ Respond briefly and helpfully. Focus on training and health. Max 2-3 sentences.`
           });
         }
 
-        const prompt = `Analyze this training goal deeply. Return ONLY JSON.
+        const prompt = `Interpret this goal and NORMALIZE messy input into clean format. Return ONLY JSON.
 
 Goal: "${goalText}"
 
-CLASSIFICATION RULES:
+NORMALIZATION RULES (CRITICAL):
+1. Remove filler: "hmmmm", "i think", "maybe", "i guess", "uhh", "???" → Remove
+2. Time format: "under 4 hours" / "under 4h" / "below 4h" → "Sub-4h"
+3. Weight format: "100 kg" / "100 kilos" → "100kg"
+4. Distance format: "5 km" / "5 kilometers" → "5K"
+5. Title Case for displayTitle
 
-1. TYPE (EVENT vs NON_EVENT):
-   - EVENT = mentions specific race, competition, event with date/deadline
-   - NON_EVENT = general fitness, strength, health, lifestyle goals
+NORMALIZATION EXAMPLES:
+- "hmmmm i think i want to run a marathon under 4h ??" → displayTitle: "Sub-4h Marathon"
+- "maybe bench press like 100 kg or something" → displayTitle: "Bench Press 100kg"
+- "i want to do a half marathon in under 2 hours" → displayTitle: "Half Marathon Sub-2h"
+- "get stronger i guess??" → displayTitle: "Build Strength"
+- "stockholm marathon" → displayTitle: "Stockholm Marathon"
+- "lose weight like 10 kilos" → displayTitle: "Lose 10kg"
 
-2. LEVEL (1-5):
-   - 1 = Complete beginner, no training background
-   - 2 = Some experience, inconsistent
-   - 3 = Moderate experience, trains sometimes
-   - 4 = Experienced, trains regularly
-   - 5 = Elite/competitive athlete
+FIELDS:
+- type: "EVENT" (race/competition/deadline) or "NON_EVENT" (general goal)
+- level: 1-5 (1=beginner target, 5=elite target)
+- intent: FUNKTION | KANSLA | LIVSSTIL | PRESTATION | EXPERIMENT
+- direction: What they want (brief phrase)
+- displayTitle: CLEAN 2-6 word title (NO filler words, normalized format)
+- risk: Array of concerns or []
+- confidence: "high" | "medium" | "low"
+- needsEventDetails: true if EVENT needs date/details
+- needsMoreInfo: true ONLY if goal is too vague (e.g., "get fit", "run")
+- missingInfo: Short question if needsMoreInfo=true, else null
 
-3. INTENT (primary motivation):
-   - FUNKTION = wants functional ability (run 5k, lift X kg, do pull-ups)
-   - KANSLA = wants to feel better (mood, energy, mental health)
-   - LIVSSTIL = wants sustainable habit (routine, consistency)
-   - PRESTATION = wants measurable performance (time, weight, distance)
-   - EXPERIMENT = wants to try something new (new sport, challenge)
+IMPORTANT: Messy informal input does NOT mean needsMoreInfo=true.
+If goal is CLEAR despite filler words, normalize it and set needsMoreInfo=false.
+Only set needsMoreInfo=true for genuinely vague goals like "get fit" or single words.
 
-4. DIRECTION: What specifically they want to achieve (brief phrase)
-
-5. DISPLAY_TITLE: A SHORT, CLEAN, MOTIVATING goal title (2-6 words max).
-   This is the user's goal displayed as a punchy statement.
-
-   RULES FOR DISPLAY_TITLE:
-   - NO dates, NO years, NO "in X weeks"
-   - Include event name if mentioned
-   - Include target (time, weight, distance) if mentioned
-   - Make it sound like a badge/achievement
-
-   Examples:
-   - "I want to run a marathon in under 5 hours" → "Sub-5h Marathon"
-   - "I want to run Boston Marathon in under 4 hours" → "Sub-4h Boston Marathon"
-   - "I want to run Stockholm Marathon next year" → "Stockholm Marathon"
-   - "I want to finish Ironman 70.3" → "Ironman 70.3 Finish"
-   - "I want to get stronger and build muscle" → "Build Strength"
-   - "I want to feel better and have more energy" → "Better Energy & Mood"
-   - "I want to bench press 100kg" → "100kg Bench Press"
-   - "I want to lose weight and get in shape" → "Get in Shape"
-   - "I want to be able to do 10 pull-ups" → "10 Pull-ups"
-   - "I want to run 5k" → "Run 5K"
-   - "I want to run Lidingöloppet under 2 hours" → "Sub-2h Lidingöloppet"
-
-   Remove ALL filler words. Make it punchy like a goal badge.
-
-6. RISK: Any concerns or red flags (overtraining, injury risk, unrealistic)
-
-Format:
+Return JSON:
 {
   "type": "EVENT" | "NON_EVENT",
   "level": 1-5,
-  "intent": "FUNKTION" | "KANSLA" | "LIVSSTIL" | "PRESTATION" | "EXPERIMENT",
-  "direction": "brief description of what they want",
-  "displayTitle": "Short 2-5 word goal title",
-  "risk": ["risk1", "risk2"] or [],
+  "intent": "...",
+  "direction": "...",
+  "displayTitle": "Clean Normalized Title",
+  "risk": [],
   "confidence": "high" | "medium" | "low",
-  "needsEventDetails": true | false
+  "needsEventDetails": true | false,
+  "needsMoreInfo": true | false,
+  "missingInfo": "Short question" | null
 }`;
 
         const text = await callAI(SYSTEM_PROMPT_V2, prompt, 512);
@@ -559,6 +544,8 @@ Format:
             risk: [],
             confidence: "low",
             needsEventDetails: false,
+            needsMoreInfo: goalText.length < 5,
+            missingInfo: goalText.length < 5 ? "What specifically do you want to achieve?" : null,
           },
         });
       }

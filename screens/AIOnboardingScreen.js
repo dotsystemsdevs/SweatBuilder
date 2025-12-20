@@ -715,85 +715,84 @@ export default function AIOnboardingScreen() {
       switch (step) {
         case STEPS.GOAL_INPUT: {
           console.log("[Onboarding] GOAL_INPUT: Processing goal:", text);
-          // Check if goal mentions event-like keywords - be aggressive about detection
-          const eventKeywords = /\b(marathon|half.?marathon|10k|5k|21k|42k|triathlon|ironman|race|lopp|loppet|tävling|tävla|sprint|ultra|relay|stafett|swim|swimrun|bike|cykel|sim|mila|km|kilometer|vasalopp|lidingö|göteborgs|stockholm|berlin|london|new york|boston|chicago|midnattsloppet|blodomloppet|tjejmilen|vårruset|kungsholmen|classic|challenge|ötillö|tough|mudder|obstacle|hinderbana|crossfit|games|competition|match|cup|mästerskap|championship)\b/i;
-          const looksLikeEvent = eventKeywords.test(text);
 
-          // Try to interpret with AI first
+          // Basic validation
+          if (text.length < 3) {
+            setShowTextInput(true);
+            addMessage("Can you tell me a bit more?", true, null);
+            break;
+          }
+
+          // Call AI to interpret and normalize the goal
           let goalData = { raw: text, type: GOAL_TYPES.NON_EVENT };
-          let aiDisplayTitle = text; // Default to user's text
+          let aiDisplayTitle = text;
+          let needsMoreInfo = false;
+          let missingInfoMsg = null;
 
           try {
             const res = await interpretGoalV2(text);
             if (res?.ok && res?.data) {
-              const { type, level, intent, direction, displayTitle, confidence } = res.data;
+              const { type, level, intent, direction, displayTitle, confidence, risk, needsEventDetails, needsMoreInfo: apiNeedsMore, missingInfo } = res.data;
 
-              goalData = {
-                raw: text,
-                type: type || (looksLikeEvent ? GOAL_TYPES.EVENT : GOAL_TYPES.NON_EVENT),
-                level,
-                displayTitle: displayTitle || direction || text,
-                classification: {
-                  intent,
-                  direction,
-                  risk: res.data.risk || [],
-                },
-                confidence,
-              };
+              // Check if AI says it needs more info
+              if (apiNeedsMore && missingInfo) {
+                needsMoreInfo = true;
+                missingInfoMsg = missingInfo;
+              } else {
+                // AI successfully interpreted - store normalized data
+                goalData = {
+                  raw: text,
+                  type: type || GOAL_TYPES.NON_EVENT,
+                  level,
+                  displayTitle: displayTitle || direction || text,
+                  classification: { intent, direction, risk: risk || [] },
+                  confidence,
+                  needsEventDetails,
+                };
 
-              // Use AI's displayTitle for confirmation (e.g., "Sub-5h Marathon")
-              if (displayTitle && displayTitle.length > 1) {
-                aiDisplayTitle = displayTitle;
-              } else if (direction && direction.length > 3) {
-                aiDisplayTitle = direction;
+                // Use AI's clean displayTitle
+                if (displayTitle && displayTitle.length > 1) {
+                  aiDisplayTitle = displayTitle;
+                } else if (direction && direction.length > 3) {
+                  aiDisplayTitle = direction;
+                }
+
+                console.log("[Onboarding] AI normalized:", { original: text, displayTitle: aiDisplayTitle });
               }
-
-              console.log("[Onboarding] AI interpretation:", { confidence, displayTitle, direction });
             }
           } catch (apiError) {
-            console.log("[Onboarding] API failed, using user text directly");
+            console.log("[Onboarding] API failed, using text directly");
           }
 
-          // If API didn't return type but goal looks like an event, set it
-          if (!goalData.type && looksLikeEvent) {
-            goalData.type = GOAL_TYPES.EVENT;
-          }
-
-          // Only ask for clarification if text is too short (less than 3 chars)
-          // Trust the user - they know what they want
-          if (text.length < 3) {
-            console.log("[Onboarding] Goal too short, asking for more");
+          // If AI needs more info, ask and stay in GOAL_INPUT
+          if (needsMoreInfo && missingInfoMsg) {
             setShowTextInput(true);
-            addMessage(
-              "🤔 Can you tell me a bit more about what you want to achieve?",
-              true,
-              "Tell me more"
-            );
+            addMessage(missingInfoMsg, true, null);
             break;
           }
 
-          // Clear old event data if this is a non-event goal (user might have changed from event to non-event)
-          if (!looksLikeEvent && goalData.type !== GOAL_TYPES.EVENT) {
-            setUserData((prev) => ({ ...prev, goal: goalData, event: null, isEvent: false }));
-          } else {
-            setUserData((prev) => ({ ...prev, goal: goalData }));
-          }
+          // Store goal data
+          setUserData((prev) => ({ ...prev, goal: goalData }));
           await updateGoal(goalData);
 
-          // If it looks like an event, search for details
-          if (goalData.type === GOAL_TYPES.EVENT || looksLikeEvent) {
-            let eventData = { name: text, type: "other" };
+          // Route to EVENT or NON_EVENT flow
+          if (goalData.type === GOAL_TYPES.EVENT) {
+            // EVENT FLOW - lookup event details
+            let eventData = { name: aiDisplayTitle, type: "other" };
             let eventFound = false;
 
+            // Use clean displayTitle for lookup if shorter
+            const lookupQuery = aiDisplayTitle.length < text.length ? aiDisplayTitle : text;
+
             try {
-              const lookupRes = await lookupEvent(text);
+              const lookupRes = await lookupEvent(lookupQuery);
               if (lookupRes?.ok && lookupRes?.data?.found) {
                 const { eventDate, distance, sport, location, eventName } = lookupRes.data;
                 const dateObj = eventDate ? new Date(eventDate) : null;
                 const daysUntil = dateObj ? Math.ceil((dateObj - new Date()) / (1000 * 60 * 60 * 24)) : null;
 
                 eventData = {
-                  name: eventName || text,
+                  name: eventName || aiDisplayTitle,
                   type: sport || "running",
                   date: eventDate,
                   daysUntil,
@@ -803,46 +802,33 @@ export default function AIOnboardingScreen() {
                 eventFound = true;
               }
             } catch (e) {
-              // Search failed, continue with basic info
               console.log("[Onboarding] Event lookup failed:", e);
             }
 
             setUserData((prev) => ({ ...prev, event: eventData, isEvent: true }));
             await updateEvent(eventData);
 
-            // Build event summary for confirmation
-            let summary = eventData.name;
-            if (eventData.distance) summary += ` (${eventData.distance})`;
+            // Build summary
+            let summary = aiDisplayTitle;
+            if (eventData.distance && !summary.includes(eventData.distance)) {
+              summary += ` (${eventData.distance})`;
+            }
             if (eventData.date) {
-              const dateStr = new Date(eventData.date).toLocaleDateString("en-GB", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              });
+              const dateStr = new Date(eventData.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
               summary += `\n${dateStr}`;
-              if (eventData.daysUntil && eventData.daysUntil > 0) {
-                summary += ` - ${eventData.daysUntil} days away`;
-              }
+              if (eventData.daysUntil > 0) summary += ` — ${eventData.daysUntil} days`;
             }
-            if (!eventFound) {
-              summary += "\n\n(I couldn't find the date — edit to add it, e.g. \"Stockholm Marathon June 2025\")";
+            if (!eventFound && goalData.needsEventDetails) {
+              summary += "\n\n(Add a date if you have one)";
             }
+            summary += "\n\nWhat's your ambition?";
 
-            summary += "\n\nWhat's your ambition for this?";
-
-            // Go to EVENT_AMBITION first, then GOAL_CONFIRM
-            console.log("[Onboarding] GOAL_INPUT: Event detected, going to EVENT_AMBITION");
             setStep(STEPS.EVENT_AMBITION);
             addMessage(summary, true, "Your event");
           } else {
-            // Non-event: show AI's clean displayTitle for confirmation
-            console.log("[Onboarding] GOAL_INPUT: Non-event, going to GOAL_CONFIRM");
-
-            // Use AI's displayTitle (e.g., "Sub-5h Marathon" instead of verbose user input)
-            const displayGoal = aiDisplayTitle || text;
-
+            // NON-EVENT FLOW - show normalized displayTitle for confirmation
             setStep(STEPS.GOAL_CONFIRM);
-            addMessage(`${displayGoal}\n\nIs this correct?`, true, "Confirm your goal");
+            addMessage(`${aiDisplayTitle}\n\nIs this correct?`, true, "Confirm your goal");
           }
           break;
         }
