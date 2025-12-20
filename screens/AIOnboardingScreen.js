@@ -291,21 +291,18 @@ export default function AIOnboardingScreen() {
     setUserData((prev) => ({ ...prev, event: eventData, pendingAmbition: null }));
     await updateEvent(eventData);
 
-    // Now go to GOAL_CONFIRM to lock in the goal
+    // Use AI's displayTitle (clean normalized version) for the summary
     const event = userData.event || eventData;
-    let summary = event.name || userData.goal?.raw;
-    if (event.distance) summary += ` (${event.distance})`;
+    let summary = userData.goal?.displayTitle || event.name || userData.goal?.raw;
+
+    // Add date if available and not already in displayTitle
     if (event.date) {
-      const dateStr = new Date(event.date).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
+      const dateStr = new Date(event.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
       summary += `\n${dateStr}`;
-      if (event.daysUntil && event.daysUntil > 0) {
-        summary += ` — ${event.daysUntil} days away`;
-      }
+      if (event.daysUntil > 0) summary += ` — ${event.daysUntil} days`;
     }
+
+    // Add ambition
     summary += `\nAmbition: ${performanceTarget || label}`;
     summary += "\n\nIs this correct?";
 
@@ -320,23 +317,22 @@ export default function AIOnboardingScreen() {
     addMessage(value === "confirm" ? "Confirmed" : "Edit", false);
 
     if (value === "confirm") {
-      // Goal locked in - save AI's clean displayTitle for display
-      let goalDisplay = "";
-      if (userData.event?.name) {
-        goalDisplay = userData.event.name;
+      // Goal locked in - always prefer AI's displayTitle (clean normalized version)
+      let goalDisplay = userData.goal?.displayTitle || "";
+
+      // For events, add performance target or ambition if set
+      if (userData.event) {
+        if (!goalDisplay) goalDisplay = userData.event.name || userData.goal?.raw || "";
         if (userData.event.performanceTarget) {
           goalDisplay += ` — ${userData.event.performanceTarget}`;
-        } else if (userData.event.date) {
-          const dateStr = new Date(userData.event.date).toLocaleDateString("en-GB", {
-            day: "numeric",
-            month: "short",
-          });
-          goalDisplay += ` — ${dateStr}`;
         }
-      } else {
-        // Use AI's displayTitle (e.g., "Sub-5h Marathon") for clean display
-        goalDisplay = userData.goal?.displayTitle || userData.goal?.classification?.direction || userData.goal?.raw || "";
       }
+
+      // Fallback
+      if (!goalDisplay) {
+        goalDisplay = userData.goal?.classification?.direction || userData.goal?.raw || "";
+      }
+
       setLockedGoal(goalDisplay);
 
       // Go to current state (free text)
