@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   StyleSheet,
   Text,
@@ -431,7 +431,7 @@ const STEP_ADVANCED = 'advanced';
 const STEP_ANALYZING = 'analyzing';
 const STEP_SUMMARY = 'summary';
 
-export default function FitnessAssessmentForm({ goal, onComplete }) {
+const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange, renderButtonExternally }, ref) => {
   const insets = useSafeAreaInsets();
   const [answers, setAnswers] = useState({});
   const [advancedAnswers, setAdvancedAnswers] = useState({});
@@ -445,6 +445,23 @@ export default function FitnessAssessmentForm({ goal, onComplete }) {
   const [answeredQuestions, setAnsweredQuestions] = useState([]);
   const [showIntro, setShowIntro] = useState(true);
   const [introCompleted, setIntroCompleted] = useState(false);
+
+  // Notify parent of intro state changes
+  useEffect(() => {
+    if (onIntroStateChange) {
+      onIntroStateChange(showIntro);
+    }
+  }, [showIntro, onIntroStateChange]);
+
+  // Expose startQuestions method to parent via ref
+  useImperativeHandle(ref, () => ({
+    startQuestions: () => {
+      haptic('impactMedium');
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setShowIntro(false);
+      setIntroCompleted(true);
+    }
+  }));
 
   const currentQuestion = STANDARD_QUESTIONS[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex >= STANDARD_QUESTIONS.length - 1;
@@ -694,19 +711,24 @@ export default function FitnessAssessmentForm({ goal, onComplete }) {
             text="A few quick questions about your training background. This helps me create a plan that fits you."
             isNew={true}
           />
-          <View style={styles.introSpacer} />
-          <View style={[styles.introButtonArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            <TouchableOpacity onPress={handleStartQuestions} activeOpacity={0.8}>
-              <LinearGradient
-                colors={[theme.colors.purple, theme.colors.blue]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.letsGoButton}
-              >
-                <Text style={styles.letsGoButtonText}>Let's go</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+          {/* Only render button here if not rendered externally */}
+          {!renderButtonExternally && (
+            <>
+              <View style={styles.introSpacer} />
+              <View style={[styles.introButtonArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+                <TouchableOpacity onPress={handleStartQuestions} activeOpacity={0.8}>
+                  <LinearGradient
+                    colors={[theme.colors.purple, theme.colors.blue]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.letsGoButton}
+                  >
+                    <Text style={styles.letsGoButtonText}>Let's go</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </>
       )}
 
@@ -887,7 +909,9 @@ export default function FitnessAssessmentForm({ goal, onComplete }) {
       )}
     </View>
   );
-}
+});
+
+export default FitnessAssessmentForm;
 
 // =============================================================================
 // STYLES

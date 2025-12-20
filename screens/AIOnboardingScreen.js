@@ -479,6 +479,8 @@ export default function AIOnboardingScreen() {
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const selectedRaceRef = useRef(null); // Sync ref for race selection
+  const fitnessFormRef = useRef(null); // Ref for FitnessAssessmentForm
+  const [fitnessFormShowsIntro, setFitnessFormShowsIntro] = useState(true);
   const keyboardBehavior = useKeyboardBehavior();
 
   // Store hooks
@@ -2873,8 +2875,11 @@ export default function AIOnboardingScreen() {
             <View style={styles.formContainer}>
               {step === STEPS.CURRENT_STATE && (
                 <FitnessAssessmentForm
+                  ref={fitnessFormRef}
                   goal={userData.goal}
                   onComplete={handleFitnessAssessmentComplete}
+                  onIntroStateChange={setFitnessFormShowsIntro}
+                  renderButtonExternally={true}
                 />
               )}
 
@@ -2982,6 +2987,25 @@ export default function AIOnboardingScreen() {
             >
               <LinearGradient
                 colors={[theme.colors.orange, theme.colors.purple]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.continueButton}
+              >
+                <Text style={styles.continueButtonText}>Let's go</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Continue button for CURRENT_STATE (Step 2) intro */}
+        {step === STEPS.CURRENT_STATE && fitnessFormShowsIntro && !typingMessageId && (
+          <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <TouchableOpacity
+              onPress={() => fitnessFormRef.current?.startQuestions()}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={[theme.colors.purple, theme.colors.blue]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.continueButton}
