@@ -2980,7 +2980,21 @@ export default function AIOnboardingScreen() {
 
         {/* Continue button for INTRO */}
         {step === STEPS.INTRO && !typingMessageId && (
-          <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <Animated.View
+            style={[
+              styles.inputArea,
+              { paddingBottom: Math.max(insets.bottom, 16) },
+              {
+                opacity: pillsAnim,
+                transform: [{
+                  translateY: pillsAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [10, 0],
+                  }),
+                }],
+              },
+            ]}
+          >
             <TouchableOpacity
               onPress={handleIntroContinue}
               activeOpacity={0.8}
@@ -2994,12 +3008,26 @@ export default function AIOnboardingScreen() {
                 <Text style={styles.continueButtonText}>Let's go</Text>
               </LinearGradient>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         )}
 
         {/* Continue button for CURRENT_STATE (Step 2) intro */}
         {step === STEPS.CURRENT_STATE && fitnessFormShowsIntro && !typingMessageId && (
-          <View style={[styles.inputArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <Animated.View
+            style={[
+              styles.inputArea,
+              { paddingBottom: Math.max(insets.bottom, 16) },
+              {
+                opacity: pillsAnim,
+                transform: [{
+                  translateY: pillsAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [10, 0],
+                  }),
+                }],
+              },
+            ]}
+          >
             <TouchableOpacity
               onPress={() => fitnessFormRef.current?.startQuestions()}
               activeOpacity={0.8}
@@ -3013,7 +3041,7 @@ export default function AIOnboardingScreen() {
                 <Text style={styles.continueButtonText}>Let's go</Text>
               </LinearGradient>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         )}
 
         {/* Text input */}

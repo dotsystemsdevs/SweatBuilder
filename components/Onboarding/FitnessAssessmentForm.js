@@ -186,7 +186,41 @@ const ADVANCED_SECTIONS = {
 // SUB-COMPONENTS
 // =============================================================================
 
-// AI Message Bubble with typewriter effect and fade-in animation
+// User Answer Bubble with fade-in animation (synced with Step 1 animations)
+const UserBubble = ({ emoji, text, style, isNew = true }) => {
+  const fadeAnim = useRef(new Animated.Value(isNew ? 0 : 1)).current;
+  const slideAnim = useRef(new Animated.Value(isNew ? 10 : 0)).current;
+
+  useEffect(() => {
+    if (isNew) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400, // Synced with Step 1 (pillsAnim)
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400, // Synced with Step 1 (pillsAnim)
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isNew]);
+
+  return (
+    <Animated.View style={[
+      styles.userBubble,
+      style,
+      { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+    ]}>
+      {emoji && <Text style={styles.userBubbleEmoji}>{emoji}</Text>}
+      <Text style={styles.userBubbleText}>{text}</Text>
+    </Animated.View>
+  );
+};
+
+// AI Message Bubble with typewriter effect and fade-in animation (synced with Step 1)
 const AIBubble = ({ title, text = '', isNew, compact }) => {
   const safeText = text || '';
   const [displayedText, setDisplayedText] = useState(isNew ? '' : safeText);
@@ -201,16 +235,16 @@ const AIBubble = ({ title, text = '', isNew, compact }) => {
       return;
     }
 
-    // Fade in animation
+    // Fade in animation (synced with Step 1 - 400ms, translateY 10→0)
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 300,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 300,
+        duration: 400,
         useNativeDriver: true,
       }),
     ]).start();
@@ -772,21 +806,21 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
 
       {/* "Let's go" user message after intro */}
       {introCompleted && !showIntro && (
-        <View style={styles.letsGoMessage}>
-          <Text style={styles.letsGoMessageText}>Let's go</Text>
-        </View>
+        <UserBubble text="Let's go" style={styles.letsGoMessage} />
       )}
 
       {/* Already answered questions - compact view */}
       {!showIntro && answeredQuestions.map((q, idx) => {
         const display = getAnswerDisplay(q, q.answer);
+        const isNewest = idx === answeredQuestions.length - 1;
         return (
           <View key={q.id} style={styles.answeredBlock}>
             <AIBubble title={q.title} text={q.question} isNew={false} compact />
-            <View style={styles.userBubble}>
-              {display.emoji && <Text style={styles.userBubbleEmoji}>{display.emoji}</Text>}
-              <Text style={styles.userBubbleText}>{display.label}</Text>
-            </View>
+            <UserBubble
+              emoji={display.emoji}
+              text={display.label}
+              isNew={isNewest}
+            />
           </View>
         );
       })}
