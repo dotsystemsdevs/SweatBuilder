@@ -1044,19 +1044,21 @@ export default function AIOnboardingScreen() {
 
   return (
     <DynamicSafeAreaView style={styles.screen}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1 }}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={{ width: 40 }} />
-          <Text style={styles.headerTitle}>SweatBuilder</Text>
-          <View style={{ width: 40 }} />
-        </View>
+      {/* Header - OUTSIDE KeyboardAvoidingView so it stays fixed */}
+      <View style={styles.header}>
+        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>SweatBuilder</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
-        {/* Progress */}
-        <ProgressBar progress={progress} />
+      {/* Progress */}
+      <ProgressBar progress={progress} />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
 
         {/* Locked Steps Display */}
         {(lockedGoal || lockedCurrentState) && (
@@ -1380,7 +1382,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: theme.spacing.screenPadding,
-    paddingBottom: 200,
+    paddingBottom: 100,
   },
   messageBubble: {
     marginBottom: theme.spacing.sm,
@@ -1426,6 +1428,7 @@ const styles = StyleSheet.create({
   inputArea: {
     paddingHorizontal: theme.spacing.screenPadding,
     paddingTop: theme.spacing.sm,
+    backgroundColor: theme.colors.background,
   },
   inputContainer: {
     flexDirection: "row",
