@@ -17,6 +17,8 @@ import ThemeScreen from "../screens/ThemeScreen";
 import WorkoutCardsScreen from "../screens/WorkoutCardsScreen";
 import WorkoutUIScreen from "../screens/WorkoutUIScreen";
 import DesignSystemScreen from "../screens/DesignSystemScreen";
+import AIOnboardingScreen from "../screens/AIOnboardingScreen";
+import ComingSoonScreen from "../screens/ComingSoonScreen";
 import { useOnboardingStore } from "../store/onboardingStore";
 import theme from "../theme";
 
@@ -119,6 +121,16 @@ export default function RootNavigator() {
         <Stack.Screen name="WorkoutCards" component={WorkoutCardsScreen} />
         <Stack.Screen name="WorkoutUI" component={WorkoutUIScreen} />
         <Stack.Screen name="DesignSystem" component={DesignSystemScreen} />
+        <Stack.Screen
+          name="AIOnboarding"
+          component={AIOnboardingScreen}
+          options={modalTransition}
+        />
+        <Stack.Screen
+          name="ComingSoon"
+          component={ComingSoonScreen}
+          options={slideTransition}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
