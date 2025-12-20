@@ -690,9 +690,10 @@ export default function FitnessAssessmentForm({ goal, onComplete }) {
       {/* Intro - full screen with button at bottom like Step 1 */}
       {showIntro && (
         <>
-          <Text style={styles.introText}>
-            A few quick questions about your training background. This helps me create a plan that fits you.
-          </Text>
+          <AIBubble
+            text="A few quick questions about your training background. This helps me create a plan that fits you."
+            isNew={true}
+          />
           <View style={styles.introSpacer} />
           <View style={[styles.introButtonArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <TouchableOpacity onPress={handleStartQuestions} activeOpacity={0.8}>
