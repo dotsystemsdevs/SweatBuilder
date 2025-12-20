@@ -33,13 +33,13 @@ const STANDARD_QUESTIONS = [
     title: 'Training Experience',
     question: 'How long have you been training regularly?',
     type: 'single',
-    layout: 'scale',
+    layout: 'grid',
     options: [
-      { id: 'beginner', label: 'New', emoji: '🌱' },
-      { id: '1-6months', label: '1-6m', emoji: '🌿' },
-      { id: '6-12months', label: '6-12m', emoji: '🌳' },
-      { id: '1-3years', label: '1-3y', emoji: '💪' },
-      { id: '3+years', label: '3y+', emoji: '🏆' },
+      { id: 'beginner', label: 'Just starting', emoji: '🌱' },
+      { id: '1-6months', label: '1-6 months', emoji: '🌿' },
+      { id: '6-12months', label: '6-12 months', emoji: '🌳' },
+      { id: '1-3years', label: '1-3 years', emoji: '💪' },
+      { id: '3+years', label: '3+ years', emoji: '🏆' },
     ],
   },
   {
@@ -47,12 +47,12 @@ const STANDARD_QUESTIONS = [
     title: 'Training Frequency',
     question: 'How often do you train right now?',
     type: 'single',
-    layout: 'scale',
+    layout: 'grid',
     options: [
-      { id: '0-1', label: '0-1x', emoji: '1️⃣' },
-      { id: '2-3', label: '2-3x', emoji: '2️⃣' },
-      { id: '4-5', label: '4-5x', emoji: '4️⃣' },
-      { id: '6+', label: '6+', emoji: '🔥' },
+      { id: '0-1', label: '0-1x/week', emoji: '1️⃣' },
+      { id: '2-3', label: '2-3x/week', emoji: '2️⃣' },
+      { id: '4-5', label: '4-5x/week', emoji: '4️⃣' },
+      { id: '6+', label: '6+/week', emoji: '🔥' },
     ],
   },
   {
@@ -70,20 +70,6 @@ const STANDARD_QUESTIONS = [
       { id: 'yoga', label: 'Yoga/Pilates', emoji: '🧘' },
       { id: 'sports', label: 'Sports', emoji: '⚽' },
       { id: 'other', label: 'Other', emoji: '✨', hasInput: true, inputPlaceholder: 'Which?' },
-    ],
-  },
-  {
-    id: 'perceivedLevel',
-    title: 'Current Level',
-    question: 'How would you describe your current fitness?',
-    type: 'single',
-    layout: 'scale',
-    important: true,
-    options: [
-      { id: 'poor', label: '😅', sublabel: 'Starting' },
-      { id: 'okay', label: '🙂', sublabel: 'Building' },
-      { id: 'good', label: '😊', sublabel: 'Solid' },
-      { id: 'great', label: '🔥', sublabel: 'Peak' },
     ],
   },
   {
@@ -106,24 +92,11 @@ const STANDARD_QUESTIONS = [
     title: 'Daily Activity',
     question: 'What does your typical day look like?',
     type: 'single',
-    layout: 'scale',
+    layout: 'grid',
     options: [
-      { id: 'sedentary', label: '🪑', sublabel: 'Desk' },
-      { id: 'active', label: '🚶', sublabel: 'Active' },
-      { id: 'physical', label: '👷', sublabel: 'Physical' },
-    ],
-  },
-  {
-    id: 'sleep',
-    title: 'Sleep',
-    question: 'How much sleep do you usually get?',
-    type: 'single',
-    layout: 'scale',
-    options: [
-      { id: '<6h', label: '< 6h', emoji: '😴' },
-      { id: '6-7h', label: '6-7h', emoji: '😐' },
-      { id: '7-8h', label: '7-8h', emoji: '😊' },
-      { id: '8+h', label: '8h+', emoji: '😇' },
+      { id: 'sedentary', label: 'Mostly sitting', emoji: '🪑', sublabel: 'Desk job' },
+      { id: 'active', label: 'Fairly active', emoji: '🚶', sublabel: 'Moving around' },
+      { id: 'physical', label: 'Very physical', emoji: '👷', sublabel: 'Manual work' },
     ],
   },
 ];
@@ -503,7 +476,7 @@ const STEP_ADVANCED = 'advanced';
 const STEP_ANALYZING = 'analyzing';
 const STEP_SUMMARY = 'summary';
 
-const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange, renderButtonExternally }, ref) => {
+const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange, renderButtonExternally, onScrollRequest }, ref) => {
   const insets = useSafeAreaInsets();
   const [answers, setAnswers] = useState({});
   const [advancedAnswers, setAdvancedAnswers] = useState({});
@@ -524,6 +497,13 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
       onIntroStateChange(showIntro);
     }
   }, [showIntro, onIntroStateChange]);
+
+  // Auto-scroll when question changes
+  useEffect(() => {
+    if (!showIntro && onScrollRequest) {
+      setTimeout(() => onScrollRequest(), 150);
+    }
+  }, [currentQuestionIndex, step, showIntro, answeredQuestions.length]);
 
   // Expose startQuestions method to parent via ref
   useImperativeHandle(ref, () => ({
@@ -605,10 +585,8 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
     const exp = answers.trainingExperience;
     const freq = answers.trainingFrequency;
     const types = answers.trainingTypes || [];
-    const level = answers.perceivedLevel;
     const injuries = answers.injuries || [];
     const lifestyle = answers.lifestyle;
-    const sleep = answers.sleep;
 
     let parts = [];
 
@@ -617,12 +595,16 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
       parts.push("You're relatively new to training");
     } else if (exp === '3+years') {
       parts.push("You have solid experience");
+    } else if (exp === '1-3years') {
+      parts.push("You have good training experience");
     }
 
     if (freq === '0-1' || freq === '2-3') {
       parts.push("with room to build consistency");
     } else if (freq === '6+') {
       parts.push("and train frequently");
+    } else if (freq === '4-5') {
+      parts.push("with a solid training routine");
     }
 
     // Training types
@@ -633,18 +615,6 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
       if (typeLabels.length > 0) {
         parts.push(`focusing on ${typeLabels.join(', ')}`);
       }
-    }
-
-    // Level assessment
-    let levelText = '';
-    if (level === 'poor') {
-      levelText = "We'll start with foundational work and build gradually.";
-    } else if (level === 'okay') {
-      levelText = "The focus will be on building consistency and confidence.";
-    } else if (level === 'good') {
-      levelText = "You have a solid base to build on.";
-    } else {
-      levelText = "You're in great shape - we can push for optimization.";
     }
 
     // Injuries consideration
@@ -658,16 +628,16 @@ const FitnessAssessmentForm = forwardRef(({ goal, onComplete, onIntroStateChange
       }
     }
 
-    // Lifestyle/recovery context
-    let recoveryText = '';
-    if (sleep === '<6h' || sleep === '6-7h') {
-      recoveryText = ' Recovery will be a priority given your sleep patterns.';
-    }
+    // Lifestyle context
+    let lifestyleText = '';
     if (lifestyle === 'physical') {
-      recoveryText += ' Your physical job means managing total load carefully.';
+      lifestyleText = ' Your physical job means managing total load carefully.';
+    } else if (lifestyle === 'sedentary') {
+      lifestyleText = ' Movement breaks will be important given your desk-based day.';
     }
 
-    return `${parts.join(', ')}. ${levelText}${injuryText}${recoveryText}`.trim();
+    const mainSummary = parts.length > 0 ? `${parts.join(', ')}.` : "Let's build your training plan.";
+    return `${mainSummary}${injuryText}${lifestyleText}`.trim();
   };
 
   const handleAnalyze = async () => {
@@ -1223,23 +1193,24 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  // Grid layout option - matches quickReplyChip exactly (but purple)
+  // Grid layout option - card style with more space
   gridOption: {
     alignSelf: 'flex-start',
-    backgroundColor: 'transparent',
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: theme.colors.purple,
-    borderRadius: theme.radius.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm + 4,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 60,
+    minHeight: 72,
     width: '100%',
   },
   gridOptionSelected: {
     borderWidth: 2,
     borderColor: theme.colors.purple,
+    backgroundColor: theme.colors.purple + '15',
   },
   gridEmoji: {
     fontSize: 20,

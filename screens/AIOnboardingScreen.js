@@ -2880,6 +2880,7 @@ export default function AIOnboardingScreen() {
                   onComplete={handleFitnessAssessmentComplete}
                   onIntroStateChange={setFitnessFormShowsIntro}
                   renderButtonExternally={true}
+                  onScrollRequest={() => scrollRef.current?.scrollToEnd({ animated: true })}
                 />
               )}
 
